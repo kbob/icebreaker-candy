@@ -7,12 +7,11 @@ module led_driver (
         output reset,
         output [15:0] LED_PANEL);
 
-    localparam  S_START   = 8'b00000001;
-    localparam  S_BLANK   = 8'b00000010;
-    localparam  S_LATCH   = 8'b00000100;
-    localparam  S_UNLATCH = 8'b00001000;
-    localparam  S_UNBLANK = 8'b00010000;
-    localparam  S_SHIFT   = 8'b00100000;
+    localparam  S_BLANK   = 8'b00001;
+    localparam  S_LATCH   = 8'b00010;
+    localparam  S_UNLATCH = 8'b00100;
+    localparam  S_UNBLANK = 8'b01000;
+    localparam  S_SHIFT   = 8'b10000;
 
     wire        P1A1, P1A2, P1A3, P1A4, P1A7, P1A8, P1A9, P1A10;
     wire        P1B1, P1B2, P1B3, P1B4, P1B7, P1B8, P1B9, P1B10;
@@ -33,27 +32,12 @@ module led_driver (
     reg   [6:0] x;
     reg   [4:0] addr;
     reg  [19:0] frame_counter;
-    reg   [7:0] state;
+    reg   [4:0] state;
     reg         sclk_ena;
 
     // LED panel pins
-    assign P1A1 = LED_PANEL[0];
-    assign P1A2 = LED_PANEL[1];
-    assign P1A3 = LED_PANEL[2];
-    assign P1A4 = LED_PANEL[3];
-    assign P1A7 = LED_PANEL[4];
-    assign P1A8 = LED_PANEL[5];
-    assign P1A9 = LED_PANEL[6];
-    assign P1A10 = LED_PANEL[7];
-    assign P1B1 = LED_PANEL[8];
-    assign P1B2 = LED_PANEL[9];
-    assign P1B3 = LED_PANEL[10];
-    assign P1B4 = LED_PANEL[11];
-    assign P1B7 = LED_PANEL[12];
-    assign P1B8 = LED_PANEL[13];
-    assign P1B9 = LED_PANEL[14];
-    assign P1B10 = LED_PANEL[15];
-
+    assign LED_PANEL = {P1B10, P1B9, P1B8, P1B7,  P1B4, P1B3, P1B2, P1B1,
+                        P1A10, P1A9, P1A8, P1A7,  P1A4, P1A3, P1A2, P1A1};
     assign {P1A3, P1A2, P1A1}              = led_rgb0;
     assign {P1A9, P1A8, P1A7}              = led_rgb1;
     assign {P1B10, P1B4, P1B3, P1B2, P1B1} = led_addr;
@@ -75,14 +59,11 @@ module led_driver (
             addr                  <= 0;
             frame_counter         <= 0;
             x                     <= 0;
-            state                 <= S_START;
+            state                 <= S_BLANK;
             sclk_ena              <= 0;
         end
         else
             case (state)
-
-                S_START:
-                    state         <= S_BLANK;
 
                 S_BLANK:
                     begin
