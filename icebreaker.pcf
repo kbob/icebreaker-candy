@@ -43,6 +43,24 @@ set_io -nowarn P1B8       36
 set_io -nowarn P1B9       32
 set_io -nowarn P1B10      28
 
+# LED Panel (PMODs 1A and 1B)
+set_io -nowarn LED_PANEL[0]     4
+set_io -nowarn LED_PANEL[1]     2
+set_io -nowarn LED_PANEL[2]    47
+set_io -nowarn LED_PANEL[3]    45
+set_io -nowarn LED_PANEL[4]     3
+set_io -nowarn LED_PANEL[5]    48
+set_io -nowarn LED_PANEL[6]    46
+set_io -nowarn LED_PANEL[7]    44
+set_io -nowarn LED_PANEL[8]    43
+set_io -nowarn LED_PANEL[9]    38
+set_io -nowarn LED_PANEL[10]   34
+set_io -nowarn LED_PANEL[11]   31
+set_io -nowarn LED_PANEL[12]   42
+set_io -nowarn LED_PANEL[13]   36
+set_io -nowarn LED_PANEL[14]   32
+set_io -nowarn LED_PANEL[15]   28
+
 # PMOD 2
 set_io -nowarn P2_1       27
 set_io -nowarn P2_2       25
