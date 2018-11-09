@@ -22,12 +22,13 @@ module painter(
         input  [5:0] y,
         output [2:0] rgb);
 
-    wire x_single_bit, y_single_bit;
+    wire border, x_single_bit, y_single_bit;
 
+    assign border = x == 0 || y == 0 || x == 63 || y == 63;
     assign x_single_bit = (| x) & (~|(x & (x - 1)));
     assign y_single_bit = (| y) & (~|(y & (y - 1)));
 
     //             BLUE GREEN RED
-    assign rgb = {0, y_single_bit, x_single_bit};
+    assign rgb = {border, y_single_bit, x_single_bit};
 
 endmodule
