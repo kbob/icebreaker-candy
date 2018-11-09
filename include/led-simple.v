@@ -1,5 +1,16 @@
 `default_nettype none
 
+// TODO:
+//
+//    split led_driver into two modules.  One that manipulates the
+//    output pins and one that instantiates all the other modules.
+//
+//    parameterize for delay.
+//
+//    combine frame and subframe.
+
+
+
 module led_driver (
         input         CLK,
         input         reset_pin,
@@ -7,13 +18,33 @@ module led_driver (
         output        reset,
         output [15:0] LED_PANEL);
 
-    localparam S_BLANK  = 4'b0001;
-    localparam S_SHIFT0 = 4'b0010;
-    localparam S_SHIFT  = 4'b0100;
-    localparam S_SHIFTN = 4'b1000;
+    // State machine.
+    localparam S_START   = 6'b000001;
+    localparam S_SHIFT0  = 6'b000010;
+    localparam S_SHIFT   = 6'b000100;
+    localparam S_SHIFTN  = 6'b001000;
+    localparam S_BLANK   = 6'b010000;
+    localparam S_UNBLANK = 6'b100000;
 
+    // Route outputs to LED panel with registers as needed.
+    reg   [2:0] led_rgb0;
+    reg   [2:0] led_rgb1;
+    reg   [4:0] led_addr;
+    wire        led_blank;
+    wire        led_latch;
+    wire        led_sclk;
     wire        P1A1, P1A2, P1A3, P1A4, P1A7, P1A8, P1A9, P1A10;
     wire        P1B1, P1B2, P1B3, P1B4, P1B7, P1B8, P1B9, P1B10;
+
+    assign {P1A3, P1A2, P1A1}              = led_rgb0;
+    assign {P1A9, P1A8, P1A7}              = led_rgb1;
+    assign {P1B10, P1B4, P1B3, P1B2, P1B1} = led_addr;
+    assign P1B7                            = led_blank;
+    assign P1B8                            = led_latch;
+    assign P1B9                            = led_sclk;
+    assign {P1A4, P1A10}                   = 0;
+    assign LED_PANEL = {P1B10, P1B9, P1B8, P1B7,  P1B4, P1B3, P1B2, P1B1,
+                        P1A10, P1A9, P1A8, P1A7,  P1A4, P1A3, P1A2, P1A1};
 
     wire        pll_locked;
     wire  [4:0] addr;
@@ -22,33 +53,13 @@ module led_driver (
     wire  [5:0] y0, y1;
     wire  [2:0] rgb0, rgb1;
 
-    reg   [2:0] led_rgb0;
-    reg   [2:0] led_rgb1;
-    reg   [4:0] led_addr;
-    wire        led_blank;
-    wire        led_latch;
-    wire        led_sclk;
-
     reg   [6:0] x;
     reg  [25:0] row_cnt;
     reg   [4:0] state;
     reg   [1:0] blank;
     reg   [1:0] latch;
-    reg         sclk_ena;
+    reg   [1:0] sclk;
     reg   [4:0] state;
-
-    // LED panel pins
-    assign LED_PANEL = {P1B10, P1B9, P1B8, P1B7,  P1B4, P1B3, P1B2, P1B1,
-                        P1A10, P1A9, P1A8, P1A7,  P1A4, P1A3, P1A2, P1A1};
-    assign {P1A3, P1A2, P1A1}              = led_rgb0;
-    assign {P1A9, P1A8, P1A7}              = led_rgb1;
-    assign {P1B10, P1B4, P1B3, P1B2, P1B1} = led_addr;
-    assign P1B7                            = led_blank;
-    assign P1B8                            = led_latch;
-    assign P1B9                            = led_sclk;
-
-    assign P1A4 = pll_clk;  // XXX debug
-    // assign P1A10 = reset;
 
     assign {frame, subframe, addr} = row_cnt;
     assign y0 = {1'b0, addr};
@@ -63,51 +74,63 @@ module led_driver (
             row_cnt               <= 0;
             blank                 <= 2'b11;
             latch                 <= 2'b00;
-            sclk_ena              <= 0;
-            state                 <= S_SHIFT;
+            sclk                  <= 2'b10;
+            state                 <= S_START;
         end
         else
             case (state)
 
-                S_BLANK:
+                S_START:          // Exit reset; start shifting column data.
                     begin
-                        led_addr  <= addr;
-                        row_cnt   <= row_cnt + 1;
-                        x         <= 0;
-                        sclk_ena  <= 0;
-                        blank     <= 2'b10;
-                        latch     <= 2'b00;
-                        state     <= S_SHIFT0;
-                    end
-
-                S_SHIFT0:
-                    begin
-                        blank     <= 2'b00;
-                        led_rgb0  <= rgb0;
-                        led_rgb1  <= rgb1;
-                        x         <= x + 1;
-                        sclk_ena  <= 1;
+                        blank     <= 2'b11; // blank until first row is latched
                         state     <= S_SHIFT;
                     end
 
-                S_SHIFT:
+                S_SHIFT0:         // Shift first column.
                     begin
                         led_rgb0  <= rgb0;
                         led_rgb1  <= rgb1;
                         x         <= x + 1;
-                        sclk_ena  <= 1;
-                        if (x == 62)
+                        blank     <= 2'b00;
+                        sclk      <= 2'b10;
+                        state     <= S_SHIFT;
+                    end
+
+                S_SHIFT:          // Shift a column.
+                    begin
+                        led_rgb0  <= rgb0;
+                        led_rgb1  <= rgb1;
+                        x         <= x + 1;
+                        sclk      <= 2'b10;
+                        if (x == 62) // next column will be the last.
                             state <= S_SHIFTN;
                     end
 
-                S_SHIFTN:
+                S_SHIFTN:         // Shift out the last column; start LATCH.
                     begin
-                        blank     <= 2'b11;
-                        latch     <= 2'b11;
+                        latch     <= 2'b01;
                         led_rgb0  <= rgb0;
                         led_rgb1  <= rgb1;
                         x         <= x + 1;
                         state     <= S_BLANK;
+                    end
+
+                S_BLANK:          // Drain shift register; start BLANK.
+                    begin
+                        blank     <= 2'b11;
+                        latch     <= 2'b10;
+                        sclk      <= 2'b00;
+                        state     <= S_UNBLANK;
+                    end
+
+                S_UNBLANK:        // End BLANK; start next row.
+                    begin
+                        led_addr  <= addr;
+                        row_cnt   <= row_cnt + 1;
+                        x         <= 0;
+                        blank     <= 2'b10;
+                        latch     <= 2'b00;
+                        state     <= S_SHIFT0;
                     end
 
             endcase
@@ -139,41 +162,20 @@ module led_driver (
         .pll_locked(pll_locked),
         .reset(reset));
 
+    ddr led_blank_ddr(
+        .clk(pll_clk),
+        .data(blank),
+        .ddr_pin(led_blank));
+
+    ddr led_latch_ddr(
+        .clk(pll_clk),
+        .data(latch),
+        .ddr_pin(led_latch));
+
     ddr led_sclk_ddr(
         .clk(pll_clk),
-        .ena(sclk_ena),
+        .data(sclk),
         .ddr_pin(led_sclk));
-
-    // ddr led_latch_ddr(
-    //     .clk(pll_clk),
-    //     .ena(latch),
-    //     .ddr_pin(led_latch));
-
-    // assign led_latch = latch;
-
-    SB_IO #(
-        .PIN_TYPE(6'b010001)
-    ) blank_ddr (
-        .PACKAGE_PIN(led_blank),
-        .LATCH_INPUT_VALUE(1'b0),
-        // .CLOCK_ENABLE(1'b1),
-        .INPUT_CLK(pll_clk),
-        .OUTPUT_CLK(pll_clk),
-        .OUTPUT_ENABLE(1'b1),
-        .D_OUT_0(blank[0]),
-        .D_OUT_1(blank[1]));
-
-        SB_IO #(
-            .PIN_TYPE(6'b010001)
-        ) latch_ddr (
-            .PACKAGE_PIN(led_latch),
-            .LATCH_INPUT_VALUE(1'b0),
-            // .CLOCK_ENABLE(1'b1),
-            .INPUT_CLK(pll_clk),
-            .OUTPUT_CLK(pll_clk),
-            .OUTPUT_ENABLE(1'b1),
-            .D_OUT_0(latch[0]),
-            .D_OUT_1(latch[1]));
 
 endmodule // top
 
@@ -225,20 +227,19 @@ endmodule // reset_logic
 
 
 module ddr (
-        input clk,
-        input ena,
-        output ddr_pin);
+        input       clk,
+        input [1:0] data,
+        output      ddr_pin);
 
     SB_IO #(
         .PIN_TYPE(6'b010001)
     ) it (
         .PACKAGE_PIN(ddr_pin),
         .LATCH_INPUT_VALUE(1'b0),
-        // .CLOCK_ENABLE(1'b1),
         .INPUT_CLK(clk),
         .OUTPUT_CLK(clk),
         .OUTPUT_ENABLE(1'b1),
-        .D_OUT_0(1'b0),
-        .D_OUT_1(ena));
+        .D_OUT_0(data[0]),
+        .D_OUT_1(data[1]));
 
 endmodule // ddr
