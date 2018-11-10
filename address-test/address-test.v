@@ -4,12 +4,12 @@
 
 module top (
         input         CLK,
-        input         BTN1_N,
+        input         BTN_N,
         output [15:0] LED_PANEL);
 
-    led_driver ld(
+    led_main main(
         .CLK(CLK),
-        .reset_pin(BTN1_N),
+        .resetn_btn(BTN_N),
         .LED_PANEL(LED_PANEL));
 
 endmodule

@@ -2,20 +2,55 @@
 
 // TODO:
 //
-//    split led_driver into two modules.  One that manipulates the
-//    output pins and one that instantiates all the other modules.
-//
 //    parameterize for delay.
 //
 //    combine frame and subframe.
 
+module led_main #(
+        parameter USE_RESETN_BUTTON = 1
+    ) (
+        input CLK,
+        input resetn_btn,
+        output pll_clk,
+        output reset,
+        output [15:0] LED_PANEL);
 
+    wire pll_clk;
+    wire pll_locked;
+    wire resetn;
+
+    led_driver driver(
+        .clk(pll_clk),
+        .reset(reset),
+        .LED_PANEL(LED_PANEL));
+
+    pll_30mhz pll(
+        .clk_pin(CLK),
+        .locked(pll_locked),
+        .pll_clk(pll_clk));
+
+    generate
+        if (USE_RESETN_BUTTON) begin
+            button_debouncer db(
+                .clk(pll_clk),
+                .button_pin(resetn_btn),
+                .level(resetn));
+        end
+        else
+            assign resetn = 1;
+    endgenerate
+
+    reset_logic rl(
+        .resetn(resetn),
+        .pll_clk(pll_clk),
+        .pll_locked(pll_locked),
+        .reset(reset));
+
+endmodule
 
 module led_driver (
-        input         CLK,
-        input         reset_pin,
-        output        pll_clk,
-        output        reset,
+        input         clk,
+        input         reset,
         output [15:0] LED_PANEL);
 
     // State machine.
@@ -46,7 +81,6 @@ module led_driver (
     assign LED_PANEL = {P1B10, P1B9, P1B8, P1B7,  P1B4, P1B3, P1B2, P1B1,
                         P1A10, P1A9, P1A8, P1A7,  P1A4, P1A3, P1A2, P1A1};
 
-    wire        pll_locked;
     wire  [4:0] addr;
     wire  [7:0] subframe;
     wire [12:0] frame;
@@ -65,7 +99,7 @@ module led_driver (
     assign y0 = {1'b0, addr};
     assign y1 = {1'b1, addr};
 
-    always @(posedge pll_clk)
+    always @(posedge clk)
         if (reset) begin
             led_rgb0              <= 0;
             led_rgb1              <= 0;
@@ -136,55 +170,100 @@ module led_driver (
             endcase
 
     painter paint0(
-        .clk(pll_clk),
+        .clk(clk),
         .reset(reset),
         .frame(frame),
+        .subframe(subframe),
         .x(x[5:0]),
         .y(y0),
         .rgb(rgb0));
 
     painter paint1(
-        .clk(pll_clk),
+        .clk(clk),
         .reset(reset),
         .frame(frame),
+        .subframe(subframe),
         .x(x[5:0]),
         .y(y1),
         .rgb(rgb1));
 
-    pll_30mhz pll(
-        .clk_pin(CLK),
-        .reset_pin(reset_pin),
-        .locked(pll_locked),
-        .pll_clk(pll_clk));
-
-    reset_logic rl(
-        .pll_clk(pll_clk),
-        .pll_locked(pll_locked),
-        .reset(reset));
-
     ddr led_blank_ddr(
-        .clk(pll_clk),
+        .clk(clk),
         .data(blank),
         .ddr_pin(led_blank));
 
     ddr led_latch_ddr(
-        .clk(pll_clk),
+        .clk(clk),
         .data(latch),
         .ddr_pin(led_latch));
 
     ddr led_sclk_ddr(
-        .clk(pll_clk),
+        .clk(clk),
         .data(sclk),
         .ddr_pin(led_sclk));
 
 endmodule // top
 
 
+module button_debouncer (
+        input  clk,
+        input  button_pin,
+        output level,
+        output rising_edge,
+        output falling_edge);
+
+    localparam COUNT_BITS = 15;
+
+    reg                  is_high;
+    reg                  was_high;
+    reg                  level_r;
+    reg                  rising_edge_r;
+    reg                  falling_edge_r;
+    reg [COUNT_BITS-1:0] counter = 0;
+
+    assign level        = level_r;
+    assign falling_edge = rising_edge_r;
+    assign rising_edge  = falling_edge_r;
+
+    always @(posedge clk)
+        if (counter) begin
+            counter            <= counter + 1;
+            rising_edge_r      <= 0;
+            falling_edge_r     <= 0;
+            was_high           <= is_high;
+        end
+        else begin
+            // was_high           <= is_high;
+            is_high            <= button_pin;
+            level_r            <= is_high;
+            if (is_high != was_high) begin
+                counter        <= 1;
+                rising_edge_r  <= is_high;
+                falling_edge_r <= ~is_high;
+            end
+        end
+
+endmodule // button_debouncer
+
+
 module pll_30mhz (
         input clk_pin,
-        input reset_pin,
         output locked,
         output pll_clk);
+
+    /**
+     * PLL configuration
+     *
+     * This Verilog header file was generated automatically
+     * using the icepll tool from the IceStorm project.
+     * It is intended for use with FPGA primitives SB_PLL40_CORE,
+     * SB_PLL40_PAD, SB_PLL40_2_PAD, SB_PLL40_2F_CORE or SB_PLL40_2F_PAD.
+     * Use at your own risk.
+     *
+     * Given input frequency:        12.000 MHz
+     * Requested output frequency:   30.000 MHz
+     * Achieved output frequency:    30.000 MHz
+     */
 
     SB_PLL40_PAD #(
         .FEEDBACK_PATH("SIMPLE"),
@@ -196,7 +275,7 @@ module pll_30mhz (
         .PACKAGEPIN(clk_pin),
         .PLLOUTCORE(pll_clk),
         .LOCK(locked),
-        .RESETB(~reset_pin),
+        .RESETB(1'b1),
         .BYPASS(1'b0)
     );
 
@@ -206,12 +285,13 @@ endmodule // pll30mhz
 module reset_logic (
         input pll_clk,
         input pll_locked,
+        input resetn,
         output reset);
 
     reg [3:0] count;
     wire reset_i;
 
-    assign reset = ~count[3];
+    assign reset_i = ~count[3] | ~resetn;
 
     always @(posedge pll_clk or negedge pll_locked)
         if (~pll_locked)
@@ -238,7 +318,6 @@ module ddr (
         .LATCH_INPUT_VALUE(1'b0),
         .INPUT_CLK(clk),
         .OUTPUT_CLK(clk),
-        .OUTPUT_ENABLE(1'b1),
         .D_OUT_0(data[0]),
         .D_OUT_1(data[1]));
 
