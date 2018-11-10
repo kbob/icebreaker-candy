@@ -140,19 +140,19 @@ module led_driver (
                             state <= S_SHIFTN;
                     end
 
-                S_SHIFTN:         // Shift out the last column; start LATCH.
+                S_SHIFTN:         // Shift the last column; start BLANK.
                     begin
-                        latch     <= 2'b01;
+                        blank     <= 2'b01;
                         led_rgb0  <= rgb0;
                         led_rgb1  <= rgb1;
                         x         <= x + 1;
                         state     <= S_BLANK;
                     end
 
-                S_BLANK:          // Drain shift register; start BLANK.
+                S_BLANK:          // Drain shift register; pulse LATCH.
                     begin
                         blank     <= 2'b11;
-                        latch     <= 2'b10;
+                        latch     <= 2'b11;
                         sclk      <= 2'b00;
                         state     <= S_UNBLANK;
                     end

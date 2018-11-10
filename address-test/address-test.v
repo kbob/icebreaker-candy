@@ -18,6 +18,7 @@ module painter(
         input        clk,
         input        reset,
         input [12:0] frame,
+        input  [7:0] subframe,
         input  [5:0] x,
         input  [5:0] y,
         output [2:0] rgb);
