@@ -7,7 +7,7 @@ module top (
         input         BTN_N,
         output [15:0] LED_PANEL);
 
-    led_main main(
+    led_main main (
         .CLK(CLK),
         .resetn_btn(BTN_N),
         .LED_PANEL(LED_PANEL));

@@ -1,10 +1,5 @@
 `default_nettype none
 
-// TODO:
-//
-//    parameterize for delay.
-//
-//    combine frame and subframe.
 
 module led_main #(
         parameter USE_RESETN_BUTTON = 1
@@ -84,18 +79,18 @@ module led_driver (
     wire  [4:0] addr;
     wire  [7:0] subframe;
     wire [12:0] frame;
+    wire  [5:0] x;
     wire  [5:0] y0, y1;
     wire  [2:0] rgb0, rgb1;
 
-    reg   [6:0] x;
-    reg  [25:0] row_cnt;
+    reg  [31:0] cnt;
     reg   [4:0] state;
     reg   [1:0] blank;
     reg   [1:0] latch;
     reg   [1:0] sclk;
     reg   [4:0] state;
 
-    assign {frame, subframe, addr} = row_cnt;
+    assign {frame, subframe, addr, x} = cnt;
     assign y0 = {1'b0, addr};
     assign y1 = {1'b1, addr};
 
@@ -104,8 +99,7 @@ module led_driver (
             led_rgb0              <= 0;
             led_rgb1              <= 0;
             led_addr              <= 0;
-            x                     <= 0;
-            row_cnt               <= 0;
+            cnt                   <= 0;
             blank                 <= 2'b11;
             latch                 <= 2'b00;
             sclk                  <= 2'b10;
@@ -124,7 +118,7 @@ module led_driver (
                     begin
                         led_rgb0  <= rgb0;
                         led_rgb1  <= rgb1;
-                        x         <= x + 1;
+                        cnt       <= cnt + 1;
                         blank     <= 2'b00;
                         sclk      <= 2'b10;
                         state     <= S_SHIFT;
@@ -134,7 +128,7 @@ module led_driver (
                     begin
                         led_rgb0  <= rgb0;
                         led_rgb1  <= rgb1;
-                        x         <= x + 1;
+                        cnt       <= cnt + 1;
                         sclk      <= 2'b10;
                         if (x == 62) // next column will be the last.
                             state <= S_SHIFTN;
@@ -145,7 +139,6 @@ module led_driver (
                         blank     <= 2'b01;
                         led_rgb0  <= rgb0;
                         led_rgb1  <= rgb1;
-                        x         <= x + 1;
                         state     <= S_BLANK;
                     end
 
@@ -160,8 +153,7 @@ module led_driver (
                 S_UNBLANK:        // End BLANK; start next row.
                     begin
                         led_addr  <= addr;
-                        row_cnt   <= row_cnt + 1;
-                        x         <= 0;
+                        cnt       <= cnt + 1;
                         blank     <= 2'b10;
                         latch     <= 2'b00;
                         state     <= S_SHIFT0;
