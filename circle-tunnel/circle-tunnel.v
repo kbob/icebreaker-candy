@@ -44,10 +44,10 @@ module painter(
         r <= sqrt_table[r2];
     end
 
-    wire [2:0] color;
+    wire [4:0] color;
     wire red, green, blue;
-    assign color = r - frame[2+:3];
-    assign red = 0;
+    assign color = r - frame[2+:5];
+    assign red = & color;
     assign green = 0;
     assign blue = & color[1:0];
     assign rgb = {red, green, blue};
