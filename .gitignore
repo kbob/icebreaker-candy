@@ -1,6 +1,9 @@
 *.asc
 *.bin
 *.blif
+*.hex
 *.json
 *.log
+*.o
 *.rpt
+gen_*_table

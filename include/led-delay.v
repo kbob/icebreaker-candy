@@ -83,7 +83,7 @@ module led_driver #(
     assign P1B7                            = led_blank;
     assign P1B8                            = led_latch;
     assign P1B9                            = led_sclk;
-    // assign {P1A4, P1A10}                   = 0;
+    assign {P1A4, P1A10}                   = 0;
     assign LED_PANEL = {P1B10, P1B9, P1B8, P1B7,  P1B4, P1B3, P1B2, P1B1,
                         P1A10, P1A9, P1A8, P1A7,  P1A4, P1A3, P1A2, P1A1};
 
