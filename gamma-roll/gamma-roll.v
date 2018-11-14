@@ -30,9 +30,9 @@ module painter24(
     wire [2:0] row, col;
     wire [7:0] x_lo, y_lo;
 
-    assign blank = !x[2:0] || !y[2:0];
-    assign row   = y[5:3];
-    assign col   = x[5:3];
+    assign blank   = !x[2:0] || !y[2:0];
+    assign row     = y[5:3];
+    assign col     = x[5:3];
 
     // Trickery: the minimum value that doesn't get gamma-corrected
     // to zero is 21.  So we'll put ceil(21/2) in the low four bits
@@ -40,10 +40,10 @@ module painter24(
     // It's wrong, but it's less visually objectionable than having
     // pixels flicker between nonzero and zero.
     //
-    // assign x_lo  = {x[2:0], x[2:0], x[2:1]};
-    // assign y_lo  = {y[2:0], y[2:0], y[2:1]};
-    assign x_lo  = {x[2:0], 4'd11};
-    assign y_lo  = {y[2:0], 4'd11};
+    // assign x_lo    = {x[2:0], x[2:0], x[2:1]};
+    // assign y_lo    = {y[2:0], y[2:0], y[2:1]};
+    assign x_lo    = {x[2:0], 4'd11};
+    assign y_lo    = {y[2:0], 4'd11};
 
     reg [7:0] red, green, blue;
     reg in_gamma;
@@ -71,6 +71,6 @@ module painter24(
         blue_g    <= in_gamma ? gamma_table[blue ][15:8] : blue;
     end
 
-    assign rgb24 = {blue_g, green_g, red_g};
+    assign rgb24   = {blue_g, green_g, red_g};
 
 endmodule
