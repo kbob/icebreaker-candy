@@ -30,6 +30,6 @@ module painter(
     assign y_single_bit = (| y) & (~|(y & (y - 1)));
 
     //             BLUE GREEN RED
-    assign rgb = {border, y_single_bit, x_single_bit};
+    assign rgb = {x_single_bit, y_single_bit, border};
 
 endmodule

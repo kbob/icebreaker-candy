@@ -33,6 +33,7 @@ module painter(
     assign dy = (dy0 < dy1) ? dy0 : dy1;
     assign dist = (dx < dy) ? dx : dy;
 
-    assign rgb = {0, 0, dist[1:0] == frame[1+:2]};
+    //             BLUE GREEN RED
+    assign rgb = {dist[1:0] == frame[1+:2], 1'b0, 1'b0};
 
 endmodule
