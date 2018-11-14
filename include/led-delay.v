@@ -15,9 +15,66 @@ module led_main #(
         output reset,
         output [15:0] LED_PANEL);
 
-    wire pll_clk;
-    wire pll_locked;
-    wire resetn;
+    // Dimensions
+    localparam db = $clog2(DELAY); // delay bits
+    localparam fb = FRAME_BITS;    // frame bits
+    localparam sb = 8;             // subframe bits
+    localparam ab = 5;             // address bits
+    localparam rb = 6;             // row bits
+    localparam cb = 6;             // column bits
+    localparam eb = fb + sb + ab + rb; // extended counter bits
+
+    localparam dh = db - 1;        // delay high bit
+    localparam fh = fb - 1;        // frame high bit
+    localparam sh = sb - 1;        // subframe high bit
+    localparam ah = ab - 1;        // address high bit
+    localparam rh = rb - 1;        // row high bit
+    localparam ch = cb - 1;        // column high bit
+    localparam eh = eb - 1;        // extended counter high bit
+
+    localparam cc = 1 << cb;       // column count
+
+    wire [ah:0] addr;
+    wire [sh:0] subframe;
+    wire [fh:0] frame;
+    wire [rh:0] y0, y1;
+    wire [ch:0] x;
+
+    assign {frame, subframe, addr, x} = painter_counter;
+    assign y0 = {1'b0, addr};
+    assign y1 = {1'b1, addr};
+
+    wire        pll_clk;
+    wire        pll_locked;
+    wire        resetn;
+    wire  [5:0] rgb_data;
+    wire [eh:0] painter_counter;
+
+    incrementer #(
+        .DELAY(DELAY),
+        .WIDTH($bits(painter_counter)),
+    ) painter_ticker (
+        .clk(pll_clk),
+        .reset(reset),
+        .counter(painter_counter));
+
+    painter paint0 (
+        .clk(pll_clk),
+        .reset(reset),
+        .frame(frame),
+        .subframe(subframe),
+        .x(x),
+        .y(y0),
+        .rgb(rgb_data[2:0]));
+
+    painter paint1 (
+        .clk(pll_clk),
+        .reset(reset),
+        .frame(frame),
+        .subframe(subframe),
+        .x(x),
+        .y(y1),
+        .rgb(rgb_data[5:3]));
 
     led_driver #(
         .FRAME_BITS(FRAME_BITS),
@@ -25,6 +82,7 @@ module led_main #(
     ) driver (
         .clk(pll_clk),
         .reset(reset),
+        .rgb_data(rgb_data),
         .LED_PANEL(LED_PANEL));
 
     pll_30mhz pll (
@@ -51,12 +109,14 @@ module led_main #(
 
 endmodule // led_main
 
+
 module led_driver #(
         parameter     FRAME_BITS = 10,
         parameter     DELAY      = 1
     ) (
         input         clk,
         input         reset,
+        input   [5:0] rgb_data,
         output [15:0] LED_PANEL);
 
     // State machine.
@@ -89,46 +149,28 @@ module led_driver #(
 
     // Dimensions
     localparam db = $clog2(DELAY); // delay bits
-    localparam fb = FRAME_BITS;    // frame bits
-    localparam sb = 8;             // subframe bits
     localparam ab = 5;             // address bits
     localparam cb = 6;             // column bits
-    localparam rb = 6;             // row bits
-    localparam lb = ab + rb;       // late counter bits
-    localparam eb = fb + sb + lb;  // early counter bits
+    localparam lb = ab + cb;       // counter bits
 
     localparam dh = db - 1;        // delay high bit
-    localparam fh = fb - 1;        // frame high bit
-    localparam sh = sb - 1;        // subframe high bit
     localparam ah = ab - 1;        // address high bit
     localparam ch = cb - 1;        // column high bit
-    localparam rh = rb - 1;        // row high bit
-    localparam lh = lb - 1;        // late counter high bit
-    localparam eh = eb - 1;        // early counter high bit
+    localparam lh = lb - 1;        // counter high bit
 
     localparam cc = 1 << cb;       // column count
 
-    wire [eh:0] early_cnt;
-    wire [ah:0] early_addr;
-    wire [ah:0] late_addr;
-    wire [sh:0] subframe;
-    wire [fh:0] frame;
-    wire [rh:0] x;
-    wire [ch:0] y0, y1;
-    wire [rh:0] col;
-    wire  [2:0] rgb0, rgb1;
+    wire [ah:0] addr;
+    wire [ch:0] col;
 
     reg  [dh:0] delay;
-    reg  [lh:0] late_cnt;
+    reg  [lh:0] counter;
     reg   [1:0] blank;
     reg   [1:0] latch;
     reg   [1:0] sclk;
     reg   [5:0] state;
 
-    assign {late_addr, col} = late_cnt;
-    assign {frame, subframe, early_addr, x} = early_cnt;
-    assign y0 = {1'b0, early_addr};
-    assign y1 = {1'b1, early_addr};
+    assign {addr, col} = counter;
 
     always @(posedge clk)
         if (reset) begin
@@ -136,7 +178,7 @@ module led_driver #(
             led_rgb1              <= 0;
             led_addr              <= 0;
             delay                 <= DELAY - 1;
-            late_cnt              <= 0;
+            counter               <= 0;
             blank                 <= 2'b11;
             latch                 <= 2'b00;
             sclk                  <= 2'b00;
@@ -155,9 +197,9 @@ module led_driver #(
 
                 S_SHIFT0:         // Shift first column.
                     begin
-                        led_rgb0  <= rgb0;
-                        led_rgb1  <= rgb1;
-                        late_cnt  <= late_cnt + 1;
+                        led_rgb0  <= rgb_data[2:0];
+                        led_rgb1  <= rgb_data[5:3];
+                        counter   <= counter + 1;
                         blank     <= 2'b00;
                         sclk      <= 2'b10;
                         state     <= S_SHIFT;
@@ -165,9 +207,9 @@ module led_driver #(
 
                 S_SHIFT:          // Shift a column.
                     begin
-                        led_rgb0  <= rgb0;
-                        led_rgb1  <= rgb1;
-                        late_cnt  <= late_cnt + 1;
+                        led_rgb0  <= rgb_data[2:0];
+                        led_rgb1  <= rgb_data[5:3];
+                        counter   <= counter + 1;
                         sclk      <= 2'b10;
                         if (col == cc - 2) // next column will be the last.
                             state <= S_SHIFTN;
@@ -176,8 +218,8 @@ module led_driver #(
                 S_SHIFTN:         // Shift the last column; start BLANK.
                     begin
                         blank     <= blank | 2'b01;
-                        led_rgb0  <= rgb0;
-                        led_rgb1  <= rgb1;
+                        led_rgb0  <= rgb_data[2:0];
+                        led_rgb1  <= rgb_data[5:3];
                         state     <= S_BLANK;
                     end
 
@@ -191,40 +233,14 @@ module led_driver #(
 
                 S_UNBLANK:        // End BLANK; start next row.
                     begin
-                        led_addr  <= late_addr;
-                        late_cnt  <= late_cnt + 1;
+                        led_addr  <= addr;
+                        counter   <= counter + 1;
                         blank     <= 2'b10;
                         latch     <= 2'b00;
                         state     <= S_SHIFT0;
                     end
 
             endcase
-
-    incrementer #(
-        .DELAY(DELAY),
-        .WIDTH($bits(early_cnt))
-    ) early_ticker (
-        .clk(clk),
-        .reset(reset),
-        .counter(early_cnt));
-
-    painter paint0 (
-        .clk(clk),
-        .reset(reset),
-        .frame(frame),
-        .subframe(subframe),
-        .x(x),
-        .y(y0),
-        .rgb(rgb0));
-
-    painter paint1 (
-        .clk(clk),
-        .reset(reset),
-        .frame(frame),
-        .subframe(subframe),
-        .x(x),
-        .y(y1),
-        .rgb(rgb1));
 
     ddr led_blank_ddr (
         .clk(clk),
