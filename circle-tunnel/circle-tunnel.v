@@ -8,6 +8,7 @@ module top (
         output [15:0] LED_PANEL);
 
     led_main #(
+        .FRAME_BITS(7),
         .DELAY(3)
     ) main (
         .CLK(CLK),
@@ -19,7 +20,7 @@ endmodule
 module painter(
         input        clk,
         input        reset,
-        input  [9:0] frame,
+        input  [6:0] frame,
         input  [7:0] subframe,
         input  [5:0] x,
         input  [5:0] y,
