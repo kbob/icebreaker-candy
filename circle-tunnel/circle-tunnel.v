@@ -51,6 +51,6 @@ module painter(
     assign red = & color;
     assign green = 0;
     assign blue = & color[1:0];
-    assign rgb = {red, green, blue};
+    assign rgb = {blue, green, red};
 
 endmodule

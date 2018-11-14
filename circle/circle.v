@@ -28,7 +28,7 @@ module painter(
     reg [10:0] x2, y2;
     reg [10:0] r2;
     wire on_circle = (256 <= r2) && (r2 < 289);
-    reg on_border[1:0];
+    reg on_border [0:1];
 
     always @(posedge clk) begin
         x2 <= (6'd32 - x) * (6'd32 - x);
@@ -41,6 +41,7 @@ module painter(
         r2 <= x2 + y2;
     end
 
-    assign rgb = {on_border[1], on_circle, 1'b0};
+    //             BLUE GREEN RED
+    assign rgb = {1'b0, on_circle, on_border[1]};
 
 endmodule
