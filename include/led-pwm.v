@@ -317,7 +317,12 @@ module pwm (
     input [7:0] color8,
     output      color1);
 
-    assign color1 = ~reset & (color8 > subframe);
+    // reverse bits to make flicker faster.
+    wire [7:0] cmp;
+    assign cmp = {subframe[0], subframe[1], subframe[2], subframe[3],
+                  subframe[4], subframe[5], subframe[6], subframe[7]};
+
+    assign color1 = ~reset & (color8 > cmp);
 
 endmodule // pwm
 
