@@ -1,4 +1,7 @@
 
+TABLES_DIR = ../tables
+GEN_GAMMA = $(TABLES_DIR)/gen_gamma_table
+
 all: $(PROJ).rpt $(PROJ).bin
 
 %.blif: %.v $(ADD_SRC) $(ADD_DEPS)
@@ -46,7 +49,12 @@ sudo-prog: $(PROJ).bin
 
 clean:
 	rm -f $(PROJ).blif $(PROJ).asc $(PROJ).log $(PROJ).rpt $(PROJ).bin \
-	      $(PROJ).json $(ADD_CLEAN)
+	      $(PROJ).json ../tables/gen_gamma_table $(ADD_CLEAN)
+
+%.hex:	../tables/gen_gamma_table
+
+$(GEN_GAMMA): $(TABLES_DIR)/gen_gamma_table.c
+$(GEN_GAMMA): LDLIBS += -lm
 
 .SECONDARY:
 .PHONY: all prog clean
