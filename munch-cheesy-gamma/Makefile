@@ -1,4 +1,4 @@
-    PROJ := munch-gamma
+    PROJ := munch-cheesy-gamma
 ADD_DEPS := ../include/led-simple.v
  PIN_DEF := ../icebreaker.pcf
   DEVICE := up5k
