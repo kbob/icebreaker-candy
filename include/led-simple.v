@@ -1,6 +1,13 @@
 `default_nettype none
 
 
+// Simple pipeline for driving an LED panel with 1 bit RGB graphics.
+//
+// Client should instantiate the `led_main` module and define a
+// `painter` module.  `painter` should be a strictly combinatoric
+// module that maps <frame, subframe, x, y> into an RGB pixel value.
+
+
 module led_main #(
         parameter USE_RESETN_BUTTON = 1
     ) (
@@ -41,7 +48,8 @@ module led_main #(
         .pll_locked(pll_locked),
         .reset(reset));
 
-endmodule
+endmodule // led_main
+
 
 module led_driver (
         input         clk,
@@ -197,7 +205,7 @@ module led_driver (
         .data(sclk),
         .ddr_pin(led_sclk));
 
-endmodule // top
+endmodule // led_driver
 
 
 module button_debouncer (

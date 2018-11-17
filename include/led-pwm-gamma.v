@@ -1,8 +1,17 @@
 `default_nettype none
 
-// TODO:
+
+// Pipeline for driving an LED panel with 24 bit RGB graphics and
+// gamma correction.  It uses pseudo-PWM at ~53 Hz.
 //
-//    combine frame and subframe.
+// Client should instantiate the `led_main` module and define a
+// `painter24` module.  `painter24` should compute a 24 bit RGB pixel
+// value, given <frame, subframe, x, y>.  Client's makefile also
+// needs to create the gamma table in gamma8x8z_table.hex.
+//
+// The `DELAY` parameter describes how many clock cycles `painter`
+// uses to calculate each pixel.
+
 
 module led_main #(
         parameter USE_RESETN_BUTTON =  1,

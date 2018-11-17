@@ -1,8 +1,15 @@
 `default_nettype none
 
-// TODO:
+
+// Pipeline for driving an LED panel with 1 bit RGB graphics.
 //
-//    combine frame and subframe.
+// Client should instantiate the `led_main` module and define a
+// `painter` module.  `painter` should map <frame, subframe, x, y>
+// into a 3 bit RGB pixel value, one bit per color.
+//
+// The `DELAY` parameter describes how many clock cycles `painter`
+// uses to calculate each pixel.
+
 
 module led_main #(
         parameter USE_RESETN_BUTTON =  1,
