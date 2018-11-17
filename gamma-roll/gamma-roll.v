@@ -48,7 +48,7 @@ module painter24(
     reg [7:0] red, green, blue;
     reg in_gamma;
     always @(posedge clk) begin
-        in_gamma  <= ((x - frame[0:5]) & 6'h20) ? 1 : 0;
+        in_gamma  <= ((x - frame[5:0]) & 6'h20) ? 1 : 0;
         if (blank) begin
             red   <= 0;
             green <= 0;
