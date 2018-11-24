@@ -6,5 +6,6 @@
 *.log
 *.o
 *.rpt
+*.vcd
 a.out
 gen_*_table
