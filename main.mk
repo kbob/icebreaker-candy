@@ -49,7 +49,7 @@ sudo-prog: $(PROJ).bin
 
 clean:
 	rm -f $(PROJ).blif $(PROJ).asc $(PROJ).log $(PROJ).rpt $(PROJ).bin \
-	      $(PROJ).json ../tables/gen_gamma_table $(ADD_CLEAN)
+	      $(PROJ).json ../tables/gen_gamma_table a.out $(ADD_CLEAN)
 
 %.hex:	../tables/gen_gamma_table
 
