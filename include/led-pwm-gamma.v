@@ -543,19 +543,21 @@ module reset_logic (
         input resetn,
         output reset);
 
-    reg [3:0] count;
-    wire reset_i;
+    localparam MSB = 3;
 
-    assign reset_i = ~count[3] | ~resetn;
+    reg  [MSB:0] count;
+    wire         ext_reset;
 
-    always @(posedge pll_clk or negedge pll_locked)
-        if (~pll_locked)
+    assign ext_reset = ~resetn | ~pll_locked;
+
+    always @(posedge pll_clk or negedge ext_reset)
+        if (~ext_reset)
             count <= 0;
-        else if  (~count[3])
+        else if  (~count[MSB])
             count <= count + 1;
 
     SB_GB rst_gb (
-        .USER_SIGNAL_TO_GLOBAL_BUFFER(reset_i),
+        .USER_SIGNAL_TO_GLOBAL_BUFFER(count[MSB]),
         .GLOBAL_BUFFER_OUTPUT(reset));
 
 endmodule // reset_logic
