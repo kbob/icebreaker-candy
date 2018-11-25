@@ -26,7 +26,7 @@ module painter(
     wire [12:0] xx = {~3'd0, x} - frame[10:2];
     wire red = 320 <= xx && xx < 448;
     wire grn = 160 <= xx && xx < 288;
-    wire blu = 0 <= xx && xx < 128;
+    wire blu =   0 <= xx && xx < 128;
 
     //            BLUE GREEN RED
     assign rgb = {blu, grn, red};
