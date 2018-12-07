@@ -1,4 +1,4 @@
-# Munch Gamma
+# Munch Cheesy Gamma
 
 Quick hack to demo low-precision multiplication for gamma correction.
 
