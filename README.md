@@ -27,6 +27,8 @@ a frame buffer.  (See below)
 
 * There is talk of making a cube of six panels and a single iCEBreaker.
 
+* Mandelbrot sets.
+
 
 # Hardware
 
