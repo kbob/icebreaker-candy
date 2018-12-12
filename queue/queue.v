@@ -76,7 +76,7 @@ module producer #(
     );
 
     localparam START_VALUE = 8'h0;  // change to cause failure
-    localparam STOP_VALUE  = 8'hF;
+    localparam STOP_VALUE  = 8'hFF;
 
     localparam S_READY     = 3'b001;
     localparam S_STALL     = 3'b010;
@@ -93,24 +93,6 @@ module producer #(
     function automatic [7:0] set_next(input [7:0] n, input [7:0] i);
         set_next = i | next_set(n, i);
     endfunction
-
-    // initial begin
-    //     $display("fs(0) => %b", first_set(0));
-    //     $display("ns(0, 0) => %b", next_set(0, 0));
-    //     $display("fs(27) => %b", first_set(27));
-    //     $display("fs(26) => %b", first_set(26));
-    //     $display("ns(27, 0) => %b", next_set(27, 0));
-    //     $display("ns(27, 1) => %b", next_set(27, 1));
-    //     $display("ns(27, 3) => %b", next_set(27, 3));
-    //     $display("ns(27, 11) => %b", next_set(27, 11));
-    //     $display("sn(27, 0) => %b", set_next(27, 0));
-    //     $display("sn(27, 1) => %b", set_next(27, 1));
-    //     $display("sn(27, 3) => %b", set_next(27, 3));
-    //     $display("sn(27, 11) => %b", set_next(27, 11));
-    //     $display("ns(7, 0) => %b", next_set(7, 0));
-    //     $display("ns(7, 1) => %b", next_set(7, 1));
-    //     $display("ns(7, 3) => %b", next_set(7, 3));
-    // end
 
     reg [2:0] state;
     reg [7:0] data_r;
@@ -173,7 +155,7 @@ module consumer #(
     );
 
     localparam START_VALUE = 0;
-    localparam STOP_VALUE  = 8'hF;
+    localparam STOP_VALUE  = 8'hFF;
 
     reg       good_r, bad_r;
     reg       ready_r;
@@ -191,7 +173,7 @@ module consumer #(
             if (SLOW)
                 delay_r <= 0;
         end
-        else if (SLOW && delay_r != expected_r)
+        else if (SLOW && delay_r != expected_r[2:0])
             delay_r <= delay_r + 1;
         else if (ready_r && enable && !done) begin
             bad_r <= data_in != expected_r;
@@ -203,7 +185,7 @@ module consumer #(
             end
         end
 
-    assign ready = !done && (SLOW ? delay_r == expected_r : 1);
+    assign ready = !done && (SLOW ? delay_r == expected_r[2:0] : 1);
     assign good = good_r;
     assign bad = bad_r;
 

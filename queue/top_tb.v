@@ -15,7 +15,7 @@ module top_tb();
 
     initial begin
         CLK = 0;
-        for (i = 0; i < 300; i++)
+        for (i = 0; i < 5000; i++)
             #1 CLK = ~CLK;
     end
 
