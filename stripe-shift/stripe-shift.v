@@ -26,7 +26,7 @@ module painter24(
         input   [5:0] y,
         output [23:0] rgb24);
 
-    wire [7:0] hue = frame[2+:8];
+    wire [7:0] hue = frame[2+:8] - x[5:1];
     wire [5:0] yy = y + frame[0+:6] + x;
     wire [4:0] dim = yy[5] ? 31 - yy[4:0] : yy[4:0];
 
