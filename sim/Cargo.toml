@@ -1,0 +1,12 @@
+[package]
+name = "sim"
+version = "0.1.0"
+authors = ["kbob <kbob@jogger-egg.com>"]
+edition = "2018"
+
+[dependencies]
+image = "0.20"
+vulkano = "0.11"
+vulkano-shaders = "0.11"
+vulkano-win = "0.11"
+winit = "0.18"

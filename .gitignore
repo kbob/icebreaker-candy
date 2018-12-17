@@ -9,3 +9,4 @@
 *.vcd
 a.out
 gen_*_table
+/sim/target

@@ -1,0 +1,7 @@
+max_width = 79
+
+# Unstable...
+# comment_width = 72
+# wrap_comments = true
+# imports_layout = "HorizontalVertical"
+
