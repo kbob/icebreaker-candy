@@ -5,6 +5,7 @@
 *.json
 *.log
 *.o
+*.pyc
 *.rpt
 *.vcd
 a.out
