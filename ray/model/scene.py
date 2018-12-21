@@ -2,25 +2,36 @@ from collections import namedtuple
 from trickery import lazy_scalar, lazy_vec3, lazy_angle, define_constants
 
 
-# Numeric constants are defined lazily.  When the caller passes in a
-# an implementation of Numerics, we can evaluate these in that numeric
+# Numeric constants are defined lazily.  When the caller passes in an
+# implementation of Numerics, we can evaluate these in that numeric
 # context.
 
 lazy_scalar('EPSILON', 1.0e-3)
-lazy_scalar('TWO', 2)
 lazy_scalar('ONE_HALF', 0.5)
+lazy_scalar('TWO', 2)
+lazy_scalar('THREE', 3)
+lazy_scalar('FIVE', 5)
+lazy_scalar('EIGHT', 8)
+lazy_scalar('TEN', 10)
+lazy_scalar('TWENTY_FIVE', 25)
+
 lazy_vec3('X', (1, 0, 0))
 lazy_vec3('Y', (0, 1, 0))
 lazy_vec3('Z', (0, 0, 1))
 lazy_vec3('RED', (1, 0, 0))
 lazy_vec3('GREEN', (0, 1, 0))
 lazy_vec3('BLUE', (0, 0, 1))
-lazy_vec3('BACKGROUND_COLOR', (0.4, 0.4, 0.9))
-lazy_vec3('FLOOR_COLOR', (0.4, 0.2, 0.2))
+
+lazy_vec3('BACKGROUND_COLOR', (0, 0, 0.9))
+
+lazy_vec3('PLANE_COLOR', (0, 0, 0.9))
 lazy_scalar('PLANE_X_EXTENT', 18)
 lazy_scalar('PLANE_Z_EXTENT', 26)
+
+lazy_scalar('SPHERE_RADIUS', 3)
 lazy_vec3('SPHERE_COLOR', (0.9, 0.9, 0))
 lazy_scalar('SPHERE_ALPHA', 0.3)
+
 lazy_vec3('CHECK0_COLOR', (0, 1, 0))
 lazy_vec3('CHECK1_COLOR', (1, 0, 0))
 
@@ -30,9 +41,7 @@ def lerp(a, b, frac):
 
 
 Ray = namedtuple('Ray', 'origin direction')
-Camera = namedtuple('Camera', 'origin direction')
-Plane = namedtuple('Plane', 'origin normal')
-Sphere = namedtuple('Sphere', 'center radius')
+Camera = namedtuple('Camera', 'position x_angle, y_angle')
 Light = namedtuple('Light', 'direction')
 
 
@@ -79,13 +88,114 @@ class Scene:
         self.height = height
         self.numerics = numerics
         define_constants(globals(), numerics)
-        self.camera = Camera(origin=numerics.vec3(0, 10, -10),
-                             direction=numerics.vec3(0, 0, 1))
         self.plane = Plane(origin=numerics.vec3(0, 0, 0),
                            normal=numerics.vec3(0, 1, 0))
-        self.sphere = Sphere(center=numerics.vec3(3, 10, 10),
-                             radius=numerics.scalar(3))
         self.light = Light(direction=numerics.vec3(1, 2, -1).normalize())
+
+    def render_scene(self):
+        cam_pos = self.numerics.vec3(0, 10, -10)
+        cam_x_angle = self.numerics.angle(degrees=20)
+        cam_y_angle = self.numerics.angle(degrees=10)
+        sphere_pos = self.numerics.vec3(3, 10, 10)
+        self.camera = Camera(position=cam_pos,
+                             x_angle=cam_x_angle,
+                             y_angle=cam_y_angle)
+        self.sphere = Sphere(center=sphere_pos, radius=SPHERE_RADIUS)
+        return self.collect_pixels()
+
+    def render_anim(self, frame_count):
+        cam_pos = self.numerics.vec3(0, 10, -10)
+        cam_x_angle = self.numerics.angle(degrees=20)
+        cam_y_angle = self.numerics.angle(degrees=10)
+        self.cam_angle_x = 0
+        self.cam_angle_y = 0
+        self.sphere_pos_x = 0
+        self.sphere_pos_z = 0
+        self.sphere_inc_x = +7 / 2**5
+        self.sphere_inc_z = +4 / 2**5
+
+        for frame in range(frame_count):
+            self.camera = self.position_camera(frame)
+            self.sphere = self.position_sphere(frame)
+            yield self.render_frame()
+
+    def position_camera(self, frame):
+        pos_sin = self.numerics.angle(units=frame * 2 % 1024).sin()
+        pos_cos = self.numerics.angle(units=frame * 3 % 1024).sin()
+        pos_x = pos_sin * EIGHT - THREE
+        pos_y = pos_cos * EIGHT + TEN
+        pos_z = pos_cos * FIVE - TWENTY_FIVE
+        pos = self.numerics.vec3(pos_x, pos_y, pos_z)
+        x_angle = self.numerics.angle(units=10)
+        y_angle = self.numerics.angle(units=10)
+        print('frame {}: cam pos = {:.4}'.format(frame, pos))
+        return Camera(position=pos, x_angle=x_angle, y_angle=y_angle)
+
+    def position_sphere(self, frame):
+        # Y: accelerated bounces
+        a = -7 / 1024
+        t = frame % 64
+        q = t * (t - 64)
+        y = 3 + q * a
+        # X, Z: linear motion
+        SPHERE_MIN_X = SPHERE_MIN_Z = -16
+        SPHERE_MAX_X = SPHERE_MIN_Z = +16
+        x = self.sphere_pos_x + self.sphere_inc_x
+        self.sphere_pos_x = x
+        if x > SPHERE_MAX_X:
+            x = SPHERE_MAX_X
+            self.sphere_inc_x = -self.sphere_inc_x
+        elif x < SPHERE_MIN_X:
+            x = SPHERE_MIN_X
+            self.sphere_inc_x = -self.sphere_inc_x
+        z = 0
+        pos = self.numerics.vec3(x, y, z)
+        return Sphere(center=pos, radius=SPHERE_RADIUS)
+
+
+    def render_frame(self):
+        self.numerics.start_frame(self.camera.position,
+                                  self.camera.x_angle,
+                                  self.camera.y_angle,
+                                  self.sphere.center)
+        pixels = self.collect_pixels()
+        self.numerics.end_frame()
+        return pixels
+
+    def collect_pixels(self):
+        return [
+            [
+                self.render_pixel(ix, iy)
+                for ix in range(self.width)
+            ]
+            for iy in range(self.height)
+        ]
+
+    def render_pixel(self, ix, iy):
+        x = self.numerics.scalar(ix)
+        y = self.numerics.scalar(iy)
+        self.numerics.start_pixel(x, y,
+                                  self.camera.position,
+                                  self.camera.x_angle,
+                                  self.camera.y_angle,
+                                  self.sphere.center)
+        x_start = self.numerics.scalar(-1 / 2)
+        y_start = self.numerics.scalar(1 / 2)
+        x_step = self.numerics.scalar(1 / min(self.width, self.height))
+        y_step = self.numerics.scalar(-1 / min(self.width, self.height))
+        # FOV is implicitly 60 degrees.
+        px = x_start + x * x_step
+        py = y_start + y * y_step
+        pz = 1
+        primary = Ray(origin=self.camera.position,
+                      direction=self.numerics.vec3(px, py, pz)
+                          .rotate(self.camera.x_angle, 'X')
+                          .rotate(self.camera.y_angle, 'Y')
+                          .normalize())
+        # print(ix, iy, primary)
+        color = self.trace(primary).to_unorm()
+        self.numerics.end_pixel(color)
+        return color
 
     def trace(self, ray, primary=True):
         if primary:
@@ -107,47 +217,16 @@ class Scene:
         pisect = hit.intersection
         if (not pisect.z.abs() - PLANE_Z_EXTENT < 0 or
             not pisect.x.abs() - PLANE_X_EXTENT < 0):
-            return FLOOR_COLOR
-        # if abs(pisect.z) >= 28 or abs(pisect.x) >= 16:
-        #     return BLUE
+            return PLANE_COLOR
         reverse_light_ray = Ray(pisect, self.light.direction)
         light_intersects = self.sphere.intersect(reverse_light_ray)
         checker = pisect.x.xor4(pisect.z)
-        C = lerp(GREEN, RED, checker)
-        # C = RED if checker else GREEN
+        C = lerp(CHECK0_COLOR, CHECK1_COLOR, checker)
         if light_intersects:
             C = ONE_HALF * C
         return C
 
 
-    def render_scene(self):
-        return self.render_frame()
-
-    def render_frame(self):
-        self.numerics.start_frame()
-        pixels = [
-            [
-                self.render_pixel(ix, iy)
-                for ix in range(self.width)
-            ]
-            for iy in range(self.height)
-        ]
-        self.numerics.end_frame()
-        return pixels
-
-    def render_pixel(self, ix, iy):
-        self.numerics.start_pixel()
-        # FOV is implicitly 60 degrees.
-        px = (self.camera.direction.x +
-              self.numerics.scalar((ix - self.width / 2) / self.width))
-        py = (self.camera.direction.y -
-              self.numerics.scalar((iy - self.height / 2) / self.width))
-        pz = self.camera.direction.z
-        primary = Ray(origin=self.camera.origin,
-                      direction=self.numerics.vec3(px, py, pz).normalize())
-        color = self.trace(primary).to_unorm()
-        self.numerics.end_pixel()
-        return color
 
 
 # Old version.  No numerics.

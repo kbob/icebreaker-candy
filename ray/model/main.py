@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from itertools import chain
 import sys
 
 import PIL.Image
@@ -11,6 +12,8 @@ from trickery import lazy_scalar, define_constants
 
 WIDTH, HEIGHT = 64, 64
 # WIDTH, HEIGHT = 256, 256
+FRAME_COUNT = 500
+
 
 def make_image():
 
@@ -18,14 +21,28 @@ def make_image():
     my_scene = scene.Scene(WIDTH, HEIGHT, numerics=numz)
     pixels = my_scene.render_scene()
 
-    img = PIL.Image.new(mode='RGB', size=(WIDTH, HEIGHT), color=0)
-    pix = img.load()
-
-    for y in range(HEIGHT):
-        for x in range(WIDTH):
-            pix[x, y] = pixels[y][x]
-
+    img = PIL.Image.new(mode='RGB', size=(WIDTH, HEIGHT))
+    img.putdata(list(chain(*pixels)))
     img.save('scene.png')
+
+
+def make_animation():
+    numz = numerics.Numerics()
+    my_scene = scene.Scene(WIDTH, HEIGHT, numerics=numz)
+    imgs = []
+
+    for (frame, pixels) in enumerate(my_scene.render_anim(FRAME_COUNT)):
+        img = PIL.Image.new(mode='RGB', size=(WIDTH, HEIGHT))
+        # pixels[0][frame] = (0xFF, 0xFF, 0xFF)
+        img.putdata(list(chain(*pixels)))
+        if frame == 0:
+            seq = img
+        else:
+            imgs.append(img)
+        print('Frame {}'.format(frame))
+
+    seq.save('scene.gif', save_all=True, append_images=imgs, duration=20, loop=100)
+
 
 def test_numerics():
     numz = numerics.Numerics()
@@ -46,24 +63,24 @@ def test_numerics():
     # print(v[2], v.z, v.b)
     # print()
     #
-    print(s + s)
-    print(s - s)
-    print(s * s)
-    print(s / s)
-    print(s.clamp(), numz.scalar(0.9).clamp())
-    print(s < 0)
-    print(s - s - s < 0)
-    try:
-        s >= 0
-        print('fail')
-    except TypeError:
-        print('scalar >= not supported')
-    try:
-        s > 0
-        print('fail')
-    except TypeError:
-        print('scalar > not supported')
-    print()
+    # print(s + s)
+    # print(s - s)
+    # print(s * s)
+    # print(s / s)
+    # print(s.clamp(), numz.scalar(0.9).clamp())
+    # print(s < 0)
+    # print(s - s - s < 0)
+    # try:
+    #     s >= 0
+    #     print('fail')
+    # except TypeError:
+    #     print('scalar >= not supported')
+    # try:
+    #     s > 0
+    #     print('fail')
+    # except TypeError:
+    #     print('scalar > not supported')
+    # print()
     #
     # print(v + v)
     # print(v - v)
@@ -78,9 +95,11 @@ def test_numerics():
     # print(v - s)
     # print(v * s)
     #
-    # print(a)
-    # print(a.sin())
-    # print(a.cos())
+    print('60° =', a)
+    print('sin 60° = {:.4}'.format(a.sin()))
+    print('cos 60° = {:.4}'.format(a.cos()))
+    print('1 radian =', numz.angle(radians=1))
+    print('64 units =', numz.angle(units=64))
     #
     # print(v.rotate(a, 'X'))
     # print(v.rotate(numerics.angle(degrees=90), 'X'))
@@ -101,5 +120,7 @@ def test_numerics():
 if __name__ == '__main__':
     if '-t' in sys.argv:
         test_numerics()
+    elif '-a' in sys.argv:
+        make_animation()
     else:
         make_image()

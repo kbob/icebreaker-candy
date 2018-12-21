@@ -8,12 +8,11 @@ class Scalar:
         else:
             self.value = float(value)
 
-    def __str__(self):
-        return str(self.value)
+    def __repr__(self):
+        return repr(self.value)
 
     def __format__(self, format_spec):
         return format(self.value, format_spec)
-        return self.value.__format__(format_spec)
 
     def __add__(self, other):
         if isinstance(other, Scalar):
@@ -65,24 +64,22 @@ class Scalar:
         a, b = math.floor(self.value), math.floor(other.value)
         return Scalar((a ^ b) >> 2 & 1)
 
-    # def floor4(self):
-    #     return Scalar(math.floor(a / 4))
-    #
-    # def xor(self, other):
-    #     assert isinstance(other, Scalar)
-    #     assert isinstance(self.value, int)
-    #     assert isinstance(other.value, int)
-    #     a, b = self.value, other.value
-    #     return Scalar((a ^ b) & 1)
-
 
 class Angle:
 
-    def __init__(self, radians=None, degrees=None):
-        assert (radians is None) != (degrees is None)
+    def __init__(self, radians=None, degrees=None, units=None):
+        assert sum(x is None for x in (radians, degrees, units)) == 2
         if degrees is not None:
             radians = degrees * math.pi / 180
+        elif units is not None:
+            radians = units * math.tau / 1024
         self.radians = radians
+
+    def __repr__(self):
+        return '{:.4}'.format(self)
+
+    def __format__(self, format_spec):
+        return '∠{}τ'.format(format(self.radians / math.tau, format_spec))
 
     def sin(self):
         return Scalar(math.sin(self.radians))
@@ -98,7 +95,7 @@ class Vec3:
 
     def __repr__(self):
         a, b, c = self.values
-        return '({} {} {})'.format(str(a), str(b), str(c))
+        return '({} {} {})'.format(repr(a), repr(b), repr(c))
 
     def __format__(self, format_spec):
         a, b, c = (format(i, format_spec) for i in self.values)
@@ -183,16 +180,16 @@ class Vec3:
 
 class Numerics:
 
-    def start_frame(self):
+    def start_frame(self, *args):
         pass
 
-    def end_frame(self):
+    def end_frame(self, *args):
         pass
 
-    def start_pixel(self):
+    def start_pixel(self, *args):
         pass
 
-    def end_pixel(self):
+    def end_pixel(self, *args):
         pass
 
     def scalar(self, value):
@@ -201,6 +198,7 @@ class Numerics:
     def vec3(self, a, b, c):
         return Vec3(a, b, c)
 
-    def angle(self, radians=None, degrees=None):
-        assert (radians is None) != (degrees is None)
-        return Angle(radians=radians, degrees=degrees)
+    def angle(self, radians=None, degrees=None, units=None):
+        """units are 1/1024th of a circle."""
+        assert sum(x is None for x in (radians, degrees, units)) == 2
+        return Angle(radians=radians, degrees=degrees, units=units)
