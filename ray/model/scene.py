@@ -104,42 +104,53 @@ class Scene:
         return self.collect_pixels()
 
     def render_anim(self, frame_count):
-        cam_pos = self.numerics.vec3(0, 10, -10)
-        cam_x_angle = self.numerics.angle(degrees=20)
-        cam_y_angle = self.numerics.angle(degrees=10)
-        self.cam_angle_x = 0
-        self.cam_angle_y = 0
+        self.cam_pos_u = 0
+        self.cam_pos_v = 0
         self.sphere_pos_x = 0
         self.sphere_pos_z = 0
         self.sphere_inc_x = +7 / 2**5
         self.sphere_inc_z = +4 / 2**5
 
         for frame in range(frame_count):
-            self.camera = self.position_camera(frame)
-            self.sphere = self.position_sphere(frame)
-            yield self.render_frame()
+            yield self.render_frame(frame)
 
-    def position_camera(self, frame):
-        pos_sin = self.numerics.angle(units=frame * 2 % 1024).sin()
-        pos_cos = self.numerics.angle(units=frame * 3 % 1024).sin()
+    def precalc_camera(self):
+        """Precalculate the camera parameters that don't require DSP.
+           Return a record of DSP pipeline inputs.
+        """
+        self.cam_pos_u = (self.cam_pos_u + 2) % 1024
+        self.cam_pos_v = (self.cam_pos_v + 3) % 1024
+        cam_pos_u = self.numerics.angle(units=self.cam_pos_u)
+        cam_pos_v = self.numerics.angle(units=self.cam_pos_v)
+        Precalc = namedtuple('Precalc', 'cam_pos_u cam_pos_v')
+        return Precalc(cam_pos_u, cam_pos_v)
+
+    def calc_camera(self, precalc):
+        """Finish calculating camera using DSP operations."""
+        pos_sin = precalc.cam_pos_u.sin()
+        pos_cos = precalc.cam_pos_v.cos()
+        # print('sin {:.4} => {:.4}'.format(precalc.cam_pos_u, pos_sin))
+        # print('cos {:.4} => {:.4}'.format(precalc.cam_pos_v, pos_cos))
         pos_x = pos_sin * EIGHT - THREE
         pos_y = pos_cos * EIGHT + TEN
         pos_z = pos_cos * FIVE - TWENTY_FIVE
         pos = self.numerics.vec3(pos_x, pos_y, pos_z)
-        x_angle = self.numerics.angle(units=10)
-        y_angle = self.numerics.angle(units=10)
-        print('frame {}: cam pos = {:.4}'.format(frame, pos))
+        x_angle = self.numerics.angle(degrees=10)
+        y_angle = self.numerics.angle(units=45)
         return Camera(position=pos, x_angle=x_angle, y_angle=y_angle)
 
-    def position_sphere(self, frame):
-        # Y: accelerated bounces
-        a = -7 / 1024
-        t = frame % 64
-        q = t * (t - 64)
-        y = 3 + q * a
-        # X, Z: linear motion
+    def precalc_sphere(self, frame):
+        """Precalculate the sphere parameters that don't require DSP.
+           Return a record of DSP pipeline inputs.
+        """
+
+        # For Y calc, just need frame number.
+        frame64 = self.numerics.scalar(frame % 64)
+        frame64m = self.numerics.scalar(frame % 64 - 64)
+
+        # Can precalc X and Z coordinates.
         SPHERE_MIN_X = SPHERE_MIN_Z = -16
-        SPHERE_MAX_X = SPHERE_MIN_Z = +16
+        SPHERE_MAX_X = SPHERE_MAX_Z = +16
         x = self.sphere_pos_x + self.sphere_inc_x
         self.sphere_pos_x = x
         if x > SPHERE_MAX_X:
@@ -148,18 +159,40 @@ class Scene:
         elif x < SPHERE_MIN_X:
             x = SPHERE_MIN_X
             self.sphere_inc_x = -self.sphere_inc_x
-        z = 0
-        pos = self.numerics.vec3(x, y, z)
+        z = self.sphere_pos_z + self.sphere_inc_z
+        self.sphere_pos_z = z
+        if z > SPHERE_MAX_Z:
+            z = SPHERE_MAX_Z
+            self.sphere_inc_z = -self.sphere_inc_z
+        elif z < SPHERE_MIN_Z:
+            z = SPHERE_MIN_Z
+            self.sphere_inc_z = -self.sphere_inc_z
+        center_x = self.numerics.scalar(x)
+        center_z = self.numerics.scalar(z)
+        Precalc = namedtuple('Precalc', 'frame64 frame64m center_x center_z')
+        return Precalc(frame64, frame64m, center_x, center_z)
+
+    def calc_sphere(self, precalc):
+        """Finish calculating sphere using DSP operations."""
+
+        y_accel = self.numerics.scalar(-7 / 1024)
+        # XXX eliminate negative number
+        q = precalc.frame64 * precalc.frame64m
+        center_y = q * y_accel + SPHERE_RADIUS
+        pos = self.numerics.vec3(precalc.center_x, center_y, precalc.center_z)
         return Sphere(center=pos, radius=SPHERE_RADIUS)
 
+    def render_frame(self, frame):
+        pre_cam = self.precalc_camera()
+        pre_sphere = self.precalc_sphere(frame)
 
-    def render_frame(self):
-        self.numerics.start_frame(self.camera.position,
-                                  self.camera.x_angle,
-                                  self.camera.y_angle,
-                                  self.sphere.center)
+        # Record the per-frame calculations.
+        self.numerics.start_frame(*pre_cam, *pre_sphere)
+        self.camera = self.calc_camera(pre_cam)
+        self.sphere = self.calc_sphere(pre_sphere)
+        self.numerics.end_frame(*self.camera, *self.sphere)
+
         pixels = self.collect_pixels()
-        self.numerics.end_frame()
         return pixels
 
     def collect_pixels(self):

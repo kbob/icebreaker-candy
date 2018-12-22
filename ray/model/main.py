@@ -12,7 +12,7 @@ from trickery import lazy_scalar, define_constants
 
 WIDTH, HEIGHT = 64, 64
 # WIDTH, HEIGHT = 256, 256
-FRAME_COUNT = 500
+FRAME_COUNT = 50
 
 
 def make_image():

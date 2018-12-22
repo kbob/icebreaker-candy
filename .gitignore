@@ -1,10 +1,12 @@
 *.asc
 *.bin
 *.blif
+*.gif
 *.hex
 *.json
 *.log
 *.o
+*.png
 *.pyc
 *.rpt
 *.vcd
