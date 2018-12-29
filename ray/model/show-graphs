@@ -1,0 +1,18 @@
+#!/bin/sh
+
+inve -e jupyterlab python -c '
+import subprocess
+import sys
+
+import pydotplus
+
+pngs = []
+for dot in sys.argv[1:]:
+    png = dot.replace(".dot", ".png")
+    with open(dot) as input:
+        g = pydotplus.graph_from_dot_data(input.read())
+    with open(png, "wb") as output:
+        output.write(g.create_png())
+    pngs.append(png)
+subprocess.call(["open"] + pngs)
+' ${1+"$@"}

@@ -9,11 +9,11 @@ from trickery import lazy_scalar, lazy_vec3, lazy_angle, define_constants
 lazy_scalar('EPSILON', 1.0e-3)
 lazy_scalar('ONE_HALF', 0.5)
 lazy_scalar('TWO', 2)
-lazy_scalar('THREE', 3)
-lazy_scalar('FIVE', 5)
-lazy_scalar('EIGHT', 8)
-lazy_scalar('TEN', 10)
-lazy_scalar('TWENTY_FIVE', 25)
+# lazy_scalar('THREE', 3)
+# lazy_scalar('FIVE', 5)
+# lazy_scalar('EIGHT', 8)
+# lazy_scalar('TEN', 10)
+# lazy_scalar('TWENTY_FIVE', 25)
 
 lazy_vec3('X', (1, 0, 0))
 lazy_vec3('Y', (0, 1, 0))
@@ -24,16 +24,21 @@ lazy_vec3('BLUE', (0, 0, 1))
 
 lazy_vec3('BACKGROUND_COLOR', (0, 0, 0.9))
 
+lazy_vec3('LIGHT_DIRECTION', (1, 2, -1))
+
 lazy_vec3('PLANE_COLOR', (0, 0, 0.9))
-lazy_scalar('PLANE_X_EXTENT', 18)
-lazy_scalar('PLANE_Z_EXTENT', 26)
+lazy_vec3('PLANE_ORIGIN', (0, 0, 0))
+lazy_vec3('PLANE_NORMAL', (0, 1, 0))
+
+lazy_scalar('CHECKER_X_EXTENT', 18)
+lazy_scalar('CHECKER_Z_EXTENT', 26)
+lazy_vec3('CHECK0_COLOR', (0, 1, 0))
+lazy_vec3('CHECK1_COLOR', (1, 0, 0))
 
 lazy_scalar('SPHERE_RADIUS', 3)
 lazy_vec3('SPHERE_COLOR', (0.9, 0.9, 0))
 lazy_scalar('SPHERE_ALPHA', 0.3)
-
-lazy_vec3('CHECK0_COLOR', (0, 1, 0))
-lazy_vec3('CHECK1_COLOR', (1, 0, 0))
+# SPHERE_RADIUS = 3
 
 
 def lerp(a, b, frac):
@@ -88,9 +93,8 @@ class Scene:
         self.height = height
         self.numerics = numerics
         define_constants(globals(), numerics)
-        self.plane = Plane(origin=numerics.vec3(0, 0, 0),
-                           normal=numerics.vec3(0, 1, 0))
-        self.light = Light(direction=numerics.vec3(1, 2, -1).normalize())
+        self.plane = Plane(origin=PLANE_ORIGIN, normal=PLANE_NORMAL)
+        self.light = Light(direction=LIGHT_DIRECTION.normalize())
 
     def render_scene(self):
         cam_pos = self.numerics.vec3(0, 10, -10)
@@ -120,20 +124,21 @@ class Scene:
         """
         self.cam_pos_u = (self.cam_pos_u + 2) % 1024
         self.cam_pos_v = (self.cam_pos_v + 3) % 1024
-        cam_pos_u = self.numerics.angle(units=self.cam_pos_u)
-        cam_pos_v = self.numerics.angle(units=self.cam_pos_v)
-        Precalc = namedtuple('Precalc', 'cam_pos_u cam_pos_v')
-        return Precalc(cam_pos_u, cam_pos_v)
+        pos_u = self.numerics.angle(units=self.cam_pos_u)
+        pos_v = self.numerics.angle(units=self.cam_pos_v)
+        PreCam = namedtuple('PreCam', 'pos_u pos_v')
+        return PreCam(pos_u, pos_v)
 
-    def calc_camera(self, precalc):
+    def calc_camera(self, pre_cam):
         """Finish calculating camera using DSP operations."""
-        pos_sin = precalc.cam_pos_u.sin()
-        pos_cos = precalc.cam_pos_v.cos()
+        S = self.numerics.scalar
+        pos_sin = pre_cam.pos_u.sin()
+        pos_cos = pre_cam.pos_v.cos()
         # print('sin {:.4} => {:.4}'.format(precalc.cam_pos_u, pos_sin))
         # print('cos {:.4} => {:.4}'.format(precalc.cam_pos_v, pos_cos))
-        pos_x = pos_sin * EIGHT - THREE
-        pos_y = pos_cos * EIGHT + TEN
-        pos_z = pos_cos * FIVE - TWENTY_FIVE
+        pos_x = pos_sin * S(8) - S(3)
+        pos_y = pos_cos * S(8) + S(10)
+        pos_z = pos_cos * S(5) - S(25)
         pos = self.numerics.vec3(pos_x, pos_y, pos_z)
         x_angle = self.numerics.angle(degrees=10)
         y_angle = self.numerics.angle(units=45)
@@ -143,10 +148,12 @@ class Scene:
         """Precalculate the sphere parameters that don't require DSP.
            Return a record of DSP pipeline inputs.
         """
+        S = self.numerics.scalar
+
 
         # For Y calc, just need frame number.
-        frame64 = self.numerics.scalar(frame % 64)
-        frame64m = self.numerics.scalar(frame % 64 - 64)
+        frame64 = S(frame % 64)
+        frame64m = S(frame % 64 - 64)
 
         # Can precalc X and Z coordinates.
         SPHERE_MIN_X = SPHERE_MIN_Z = -16
@@ -169,28 +176,37 @@ class Scene:
             self.sphere_inc_z = -self.sphere_inc_z
         center_x = self.numerics.scalar(x)
         center_z = self.numerics.scalar(z)
-        Precalc = namedtuple('Precalc', 'frame64 frame64m center_x center_z')
-        return Precalc(frame64, frame64m, center_x, center_z)
+        PreSphere = namedtuple('PreSphere',
+                               'frame64 frame64m center_x center_z')
+        return PreSphere(frame64, frame64m, center_x, center_z)
 
-    def calc_sphere(self, precalc):
+    def calc_sphere(self, pre_sphere):
         """Finish calculating sphere using DSP operations."""
+        # S = self.numerics.scalar
+        # sphere_radius = S(SPHERE_RADIUS)
 
         y_accel = self.numerics.scalar(-7 / 1024)
         # XXX eliminate negative number
-        q = precalc.frame64 * precalc.frame64m
+        q = pre_sphere.frame64 * pre_sphere.frame64m
+        center_x = pre_sphere.center_x
         center_y = q * y_accel + SPHERE_RADIUS
-        pos = self.numerics.vec3(precalc.center_x, center_y, precalc.center_z)
+        center_z = pre_sphere.center_z
+        pos = self.numerics.vec3(center_x, center_y, center_z)
         return Sphere(center=pos, radius=SPHERE_RADIUS)
 
     def render_frame(self, frame):
         pre_cam = self.precalc_camera()
         pre_sphere = self.precalc_sphere(frame)
+        # print('pre_cam', pre_cam)
+        # print('pre_sphere', pre_sphere)
 
         # Record the per-frame calculations.
-        self.numerics.start_frame(*pre_cam, *pre_sphere)
+        self.numerics.start_frame(pre_cam, pre_sphere)
         self.camera = self.calc_camera(pre_cam)
         self.sphere = self.calc_sphere(pre_sphere)
-        self.numerics.end_frame(*self.camera, *self.sphere)
+        # print('camera', self.camera)
+        # print('sphere', self.sphere)
+        self.numerics.end_frame(self.camera, self.sphere)
 
         pixels = self.collect_pixels()
         return pixels
@@ -207,19 +223,18 @@ class Scene:
     def render_pixel(self, ix, iy):
         x = self.numerics.scalar(ix)
         y = self.numerics.scalar(iy)
-        self.numerics.start_pixel(x, y,
-                                  self.camera.position,
-                                  self.camera.x_angle,
-                                  self.camera.y_angle,
-                                  self.sphere.center)
+        pixel = namedtuple('Pixel', 'x y')(x, y)
+        self.numerics.start_pixel(pixel,
+                                  self.camera,
+                                  self.sphere)
         x_start = self.numerics.scalar(-1 / 2)
-        y_start = self.numerics.scalar(1 / 2)
-        x_step = self.numerics.scalar(1 / min(self.width, self.height))
+        y_start = self.numerics.scalar(+1 / 2)
+        x_step = self.numerics.scalar(+1 / min(self.width, self.height))
         y_step = self.numerics.scalar(-1 / min(self.width, self.height))
         # FOV is implicitly 60 degrees.
         px = x_start + x * x_step
         py = y_start + y * y_step
-        pz = 1
+        pz = self.numerics.scalar(1)
         primary = Ray(origin=self.camera.position,
                       direction=self.numerics.vec3(px, py, pz)
                           .rotate(self.camera.x_angle, 'X')
@@ -227,7 +242,8 @@ class Scene:
                           .normalize())
         # print(ix, iy, primary)
         color = self.trace(primary).to_unorm()
-        self.numerics.end_pixel(color)
+        pixel_color = namedtuple('Pixel', 'color')(color)
+        self.numerics.end_pixel(pixel_color)
         return color
 
     def trace(self, ray, primary=True):
@@ -242,14 +258,15 @@ class Scene:
                     spot_light_e4 = spot_light_e2 * spot_light_e2
                     spot_light_e8 = spot_light_e4 * spot_light_e4
                     C = C + ONE_HALF * spot_light_e8
-                    C = C.clamp()
+                    # Clamp not needed.  to_unorm clamps later.
+                    # C = C.clamp()
                 return C
         hit = self.plane.intersect(ray)
         if not hit:
             return BACKGROUND_COLOR
         pisect = hit.intersection
-        if (not pisect.z.abs() - PLANE_Z_EXTENT < 0 or
-            not pisect.x.abs() - PLANE_X_EXTENT < 0):
+        if (not pisect.z.abs() - CHECKER_Z_EXTENT < 0 or
+            not pisect.x.abs() - CHECKER_X_EXTENT < 0):
             return PLANE_COLOR
         reverse_light_ray = Ray(pisect, self.light.direction)
         light_intersects = self.sphere.intersect(reverse_light_ray)

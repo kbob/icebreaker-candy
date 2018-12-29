@@ -1,6 +1,7 @@
 *.asc
 *.bin
 *.blif
+*.dot
 *.gif
 *.hex
 *.json

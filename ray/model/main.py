@@ -12,7 +12,7 @@ from trickery import lazy_scalar, define_constants
 
 WIDTH, HEIGHT = 64, 64
 # WIDTH, HEIGHT = 256, 256
-FRAME_COUNT = 50
+FRAME_COUNT = 2
 
 
 def make_image():
@@ -33,7 +33,6 @@ def make_animation():
 
     for (frame, pixels) in enumerate(my_scene.render_anim(FRAME_COUNT)):
         img = PIL.Image.new(mode='RGB', size=(WIDTH, HEIGHT))
-        # pixels[0][frame] = (0xFF, 0xFF, 0xFF)
         img.putdata(list(chain(*pixels)))
         if frame == 0:
             seq = img
@@ -41,7 +40,12 @@ def make_animation():
             imgs.append(img)
         print('Frame {}'.format(frame))
 
-    seq.save('scene.gif', save_all=True, append_images=imgs, duration=20, loop=100)
+    seq.save('scene.gif',
+             include_color_table=True,
+             save_all=True,
+             append_images=imgs,
+             duration=20,
+             loop=100)
 
 
 def test_numerics():
@@ -62,6 +66,12 @@ def test_numerics():
     # print(v[1], v.y, v.g)
     # print(v[2], v.z, v.b)
     # print()
+
+    # Deprecated
+    # # print('begin s components')
+    # # for c in s.components():
+    # #     print('   s component {}'.format(c))
+    # # print('end s components')
     #
     # print(s + s)
     # print(s - s)
@@ -82,6 +92,9 @@ def test_numerics():
     #     print('scalar > not supported')
     # print()
     #
+    # Deprecated
+    # # for c in v.components():
+    # #     print('   v component {}', c)
     # print(v + v)
     # print(v - v)
     # print(v @ v)
