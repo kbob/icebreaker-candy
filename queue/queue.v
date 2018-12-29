@@ -193,23 +193,26 @@ endmodule // consumer
 
 
 module synchronous_fifo #(
-        parameter    LENGTH = 4    // power of 2
+        parameter    LENGTH = 4,   // power of 2
+        parameter    WIDTH = 8
     ) (
-        input        clk,
-        input        reset,
-        input        enqueue_request,
-        input        dequeue_request,
-        input  [7:0] data_in,
-        output       is_empty,
-        output       is_full,
-        output [7:0] data_out
+        input         clk,
+        input         reset,
+        input         enqueue_request,
+        input         dequeue_request,
+        input  [WH:0] data_in,
+        output        is_empty,
+        output        is_full,
+        output [WH:0] data_out
     );
 
     localparam FL = LENGTH - 1;
     localparam FB = $clog2(LENGTH);
+    localparam WB = WIDTH;
     localparam FH = FB - 1;
+    localparam WH = WB - 1;
 
-    reg   [7:0] fifo [0:FL];
+    reg  [WH:0] fifo [0:FL];
     reg  [FB:0] nqi, dqi;    // enqueue index, dequeue index
     reg         is_empty_r, is_full_r;
 
