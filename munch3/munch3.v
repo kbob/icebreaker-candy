@@ -9,7 +9,7 @@ module top (
 
         led_main #(
             .FRAME_BITS(12),
-            .DELAY(2)
+            .DELAY(1)
         ) main (
             .CLK(CLK),
             .resetn_btn(BTN_N),
