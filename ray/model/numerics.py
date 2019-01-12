@@ -33,17 +33,20 @@ def record(label, op, type, predecessors):
         if type == Type.BOOL and hasattr(current_graph, 'next_test_label'):
             current_graph.annotate_test(op, current_graph.next_test_label)
             del current_graph.next_test_label
-        for p in predecessors:
-            if p not in current_graph.node_map:
-                # (name, value, type_) = trickery.find_constant(p)
-                name = getattr(p, 'name', '')
-                label = 'const\\n{}\\n{:.3}'.format(name, p)
-                type_ = Type.identify(p).name.lower()
-                current_graph.add_node(label, p, type_)
-                current_graph.tag_constant(p)
-            # assert p in current_graph.node_map, str(p)
-            if p in current_graph.node_map:
-                current_graph.add_edge(p, op)
+        if not predecessors:
+            current_graph.tag_constant(op)
+        else:
+            for p in predecessors:
+                if p not in current_graph.node_map:
+                    # (name, value, type_) = trickery.find_constant(p)
+                    name = getattr(p, 'name', '')
+                    label = 'const\\n{}\\n{:.3}'.format(name, p)
+                    type_ = Type.identify(p).name.lower()
+                    current_graph.add_node(label, p, type_)
+                    current_graph.tag_constant(p)
+                # assert p in current_graph.node_map, str(p)
+                if p in current_graph.node_map:
+                    current_graph.add_edge(p, op)
 
 
 class NumericBase:          # XXX still needed?
@@ -293,6 +296,7 @@ class Vec3(NumericBase):
         record('unorm', result, Type.RGBUNORM, (self, ))
         return result
 
+
 class RGBUnorm(NumericBase):
 
     def __init__(self, r, g, b):
@@ -360,10 +364,13 @@ class Numerics:
                 type_ = Type.identify(v).name.lower()
                 current_graph.add_node(label, v, type_)
                 current_graph.tag_input(v)
+                if getattr(v, 'constant', False):
+                    current_graph.tag_constant(v)
 
     def _end_graph(self, dotfile, *output_tuples):
         global current_graph
         assert current_graph
+        sinks = []
         for tup in output_tuples:
             for f in tup._fields:
                 v = getattr(tup, f)
@@ -372,7 +379,11 @@ class Numerics:
                 type_ = Type.identify(v)
                 record(label, out, type_, (v, ))
                 current_graph.tag_output(out)
+                sinks.append((v, out))
         current_graph.propagate_constants()
+        for (v, out) in sinks:
+            if current_graph.is_constant(out):
+                v.constant = True
         with open(dotfile, 'w') as out:
             out.write(current_graph.to_dot())
         current_graph = None

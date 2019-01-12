@@ -14,8 +14,8 @@ def lazy_scalar(name, value):
 def lazy_vec3(name, value):
     vectors.append((name, value))
 
-def lazy_angle(name, value):
-    angles.append((name, value))
+def lazy_angle(name, **kwargs):
+    angles.append((name, kwargs))
 
 def define_constants(namespace, numerics):
     # global the_namespace
@@ -28,8 +28,8 @@ def define_constants(namespace, numerics):
         v = numerics.vec3(*value)
         v.name = name
         namespace[name] = v
-    for (name, value) in angles:
-        a = numerics.angle(value)
+    for (name, kwargs) in angles:
+        a = numerics.angle(**kwargs)
         a.name = name
         namespace[name] = a
 

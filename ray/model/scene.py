@@ -7,7 +7,7 @@ from trickery import lazy_scalar, lazy_vec3, lazy_angle, define_constants
 # context.
 
 lazy_scalar('EPSILON', 1.0e-3)
-lazy_scalar('ONE_HALF', 0.5)
+# lazy_scalar('ONE_HALF', 0.5)
 lazy_scalar('TWO', 2)
 # lazy_scalar('THREE', 3)
 # lazy_scalar('FIVE', 5)
@@ -35,10 +35,14 @@ lazy_scalar('CHECKER_Z_EXTENT', 26)
 lazy_vec3('CHECK0_COLOR', (0, 1, 0))
 lazy_vec3('CHECK1_COLOR', (1, 0, 0))
 
+lazy_angle('CAMERA_X_ANGLE', degrees=10)
+lazy_angle('CAMERA_Y_ANGLE', units=45)
+
+lazy_scalar('SHADOW_ATTEN', 0.5)
+
 lazy_scalar('SPHERE_RADIUS', 3)
 lazy_vec3('SPHERE_COLOR', (0.9, 0.9, 0))
 lazy_scalar('SPHERE_ALPHA', 0.3)
-# SPHERE_RADIUS = 3
 
 
 def lerp(a, b, frac):
@@ -98,12 +102,12 @@ class Scene:
 
     def render_scene(self):
         cam_pos = self.numerics.vec3(0, 10, -10)
-        cam_x_angle = self.numerics.angle(degrees=20)
-        cam_y_angle = self.numerics.angle(degrees=10)
+        # cam_x_angle = self.numerics.angle(degrees=20)
+        # cam_y_angle = self.numerics.angle(degrees=10)
         sphere_pos = self.numerics.vec3(3, 10, 10)
         self.camera = Camera(position=cam_pos,
-                             x_angle=cam_x_angle,
-                             y_angle=cam_y_angle)
+                             x_angle=CAMERA_X_ANGLE,
+                             y_angle=CAMERA_Y_ANGLE)
         self.sphere = Sphere(center=sphere_pos, radius=SPHERE_RADIUS)
         return self.collect_pixels()
 
@@ -111,7 +115,7 @@ class Scene:
         self.cam_pos_u = 0
         self.cam_pos_v = 0
         self.sphere_pos_x = 0
-        self.sphere_pos_z = 0
+        self.sphere_pos_z = +5
         self.sphere_inc_x = +7 / 2**5
         self.sphere_inc_z = +4 / 2**5
 
@@ -259,7 +263,7 @@ class Scene:
                     spot_light_e2 = spot_light * spot_light
                     spot_light_e4 = spot_light_e2 * spot_light_e2
                     spot_light_e8 = spot_light_e4 * spot_light_e4
-                    C = C + ONE_HALF * spot_light_e8
+                    C = C + SHADOW_ATTEN * spot_light_e8
                     # Clamp not needed.  to_unorm clamps later.
                     # C = C.clamp()
                 return C
@@ -275,7 +279,7 @@ class Scene:
         checker = pisect.x.xor4(pisect.z)
         C = lerp(CHECK0_COLOR, CHECK1_COLOR, checker)
         if light_intersects:
-            C = ONE_HALF * C
+            C = SHADOW_ATTEN * C
         return C
 
 

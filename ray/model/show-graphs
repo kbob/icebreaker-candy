@@ -8,6 +8,7 @@ import pydotplus
 
 pngs = []
 for dot in sys.argv[1:]:
+    print(dot[:-4])
     png = dot.replace(".dot", ".png")
     with open(dot) as input:
         g = pydotplus.graph_from_dot_data(input.read())
