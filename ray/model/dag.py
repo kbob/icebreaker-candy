@@ -3,7 +3,9 @@ import io
 
 
 class Node(namedtuple('Node', 'name label value type')):
-    pass
+
+    def predecessors(self, dag):
+        return [edge.src for edge in dag.edges if edge.dst == self]
 
 
 class Edge(namedtuple('Edge', 'src dst')):
@@ -20,6 +22,7 @@ class Dag:
         self.node_map = {}
         self.inputs = set()
         self.outputs = set()
+        self.constants = set()
         pass
 
     def add_node(self, label, value, type):
@@ -42,23 +45,46 @@ class Dag:
         snode = self.node_map[value]
         self.outputs.add(snode)
 
+    def tag_constant(self, value):
+        cnode = self.node_map[value]
+        self.constants.add(cnode)
+
+    def propagate_constants(self):
+        done = False
+        while not done:
+            done = True
+            for node in self.nodes:
+                if node in self.constants:
+                    continue
+                pred = node.predecessors(self)
+                if pred and all(p in self.constants for p in pred):
+                    self.constants.add(node)
+                    done = False
+
     def to_dot(self):
         f = io.StringIO()
         print('digraph {} {{'.format(self.name), file=f)
         for n in sorted(self.nodes, key=lambda n: n.name):
-            extra = ''
+            attrs = 'label="{}"'.format(n.label)
+            try:
+                attrs += ' value="{:.4}"'.format(n.value)
+            except (TypeError, ValueError):
+                attrs += ' value="{}"'.format(n.value)
             if n in self.inputs:
-                extra += ' color=green shape=invhouse'
+                attrs += ' color=green shape=invhouse input=true'
             if n in self.outputs:
-                extra += ' color=red shape=house'
-            if n.label.startswith('is_'):
-                extra += ' shape=diamond'
-            if n.label.startswith('const'):
-                extra += ' color=blue shape=box'
-            print('    {} [label="{}"{}];'.format(n.name, n.label, extra),
-                  file=f)
+                attrs += ' color=red shape=house output=true'
+            if 'is_' in n.label:
+                attrs += ' shape=diamond test=true'
+            if n in self.constants and n not in self.outputs:
+                attrs += ' color=blue shape=box const=true'
+            print('    {} [{}];'.format(n.name, attrs), file=f)
         for e in self.edges:
-            print('    {} -> {} [label={}];'.format(e.src.name, e.dst.name, e.src.type), file=f)
+            attrs = 'label="{}"'.format(e.src.type)
+            if e.src.type =='vector':
+                attrs += ' penwidth=3'
+            print('    {} -> {} [{}];'.format(e.src.name, e.dst.name, attrs),
+                  file=f)
         print('}', file=f)
         return f.getvalue()
         f.close()

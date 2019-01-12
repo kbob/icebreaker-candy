@@ -1,3 +1,4 @@
+import copy
 from enum import Enum, auto
 import math
 
@@ -6,11 +7,12 @@ import trickery
 
 
 class Type(Enum):
-    SCALAR = auto()
-    ANGLE  = auto()
-    VECTOR = auto()
-    BOOL   = auto()
-    UNDEF  = auto()
+    SCALAR   = auto()
+    ANGLE    = auto()
+    VECTOR   = auto()
+    RGBUNORM = auto()
+    BOOL     = auto()
+    UNDEF    = auto()
 
     @classmethod
     def identify(cls, obj):
@@ -18,10 +20,12 @@ class Type(Enum):
             Scalar: cls.SCALAR,
             Angle: cls.ANGLE,
             Vec3: cls.VECTOR,
+            RGBUnorm: cls.RGBUNORM,
         }.get(type(obj), cls.UNDEF)
 
 
 current_graph = None
+cg_test_count = 0
 
 def record(label, op, type, predecessors):
     if current_graph:
@@ -36,6 +40,7 @@ def record(label, op, type, predecessors):
                 label = 'const\\n{}\\n{:.3}'.format(name, p)
                 type_ = Type.identify(p).name.lower()
                 current_graph.add_node(label, p, type_)
+                current_graph.tag_constant(p)
             # assert p in current_graph.node_map, str(p)
             if p in current_graph.node_map:
                 current_graph.add_edge(p, op)
@@ -54,21 +59,16 @@ class NumericBase:          # XXX still needed?
 
 class Scalar(NumericBase):
 
-    def __new__(cls, value):
-        if isinstance(value, Scalar):
+    def __new__(cls, *args):
+        if not args:
+            return super().__new__(cls)
+        value = args[0]
+        if args and isinstance(value, Scalar):
             return value
         else:
             result = super().__new__(cls)
             result.value = float(value)
             return result
-
-    # def __init__(self, value):
-    #     if isinstance(value, Scalar):
-    #         self.value = value.value
-    #         record('scalar', self, Type.SCALAR, (value,))
-    #     else:
-    #         self.value = float(value)
-    #         record('scalar', self, Type.SCALAR, ())
 
     def __repr__(self):
         return repr(self.value)
@@ -82,6 +82,7 @@ class Scalar(NumericBase):
             record('add', result, Type.SCALAR, (self, other))
             return result
         elif isinstance(other, Vec3):
+            print('S + V')
             a, b, c = other.values
             result = Vec3(self + a, self + b, self + c)
             record('add', result, Type.VECTOR, (self, other))
@@ -101,8 +102,9 @@ class Scalar(NumericBase):
             record('mul', result, Type.SCALAR, (self, other))
             return result
         elif isinstance(other, Vec3):
-            a, b, c = other.values
-            result = Vec3(self * a, self * b, self * c)
+            v = self.value
+            a, b, c = other._access_values()
+            result = Vec3(v * a, v * b, v * c)
             record('mul', result, Type.VECTOR, (self, other))
             return result
         else:
@@ -117,7 +119,10 @@ class Scalar(NumericBase):
     def __lt__(self, other):
         assert other == 0, 'must compare to zero'
         result = self.value < 0
-        record('is_neg\\n{}'.format(result), result, Type.BOOL, (self, ))
+        global cg_test_count
+        label = '{}\\nis_neg\\n{}'.format(cg_test_count, result)
+        cg_test_count += 1
+        record(label, result, Type.BOOL, (self, ))
         return result
 
     def abs(self):
@@ -132,7 +137,6 @@ class Scalar(NumericBase):
 
     def to_unorm(self):
         result = min(255, max(0, round(self.value * 255)))
-        # record('unorm', result, Type.UNDEF, (self, ))
         return result
 
     def xor4(self, other):
@@ -285,9 +289,20 @@ class Vec3(NumericBase):
 
     def to_unorm(self):
         a, b, c = self.values
-        result = (a.to_unorm(), b.to_unorm(), c.to_unorm())
-        record('unorm', result, Type.VECTOR, (self, ))
+        result = RGBUnorm(a.to_unorm(), b.to_unorm(), c.to_unorm())
+        record('unorm', result, Type.RGBUNORM, (self, ))
         return result
+
+class RGBUnorm(NumericBase):
+
+    def __init__(self, r, g, b):
+        self.values = r, g, b
+
+    def __repr__(self):
+        return '#{:02x}{:02x}{:02x}'.format(*self.values)
+
+    def as_tuple(self):
+        return self.values
 
 
 class Numerics:
@@ -295,69 +310,6 @@ class Numerics:
     def __init__(self):
         self.frame_counter = -1
         self.pixel_counter = 0
-
-    def start_frame(self, *input_tuples):
-        self.frame_counter += 1
-        global current_graph
-        assert current_graph is None
-        current_graph = dag.Dag('Frame')
-        for tup in input_tuples:
-            for f in tup._fields:
-                v = getattr(tup, f)
-                label = '{}.{}'.format(tup.__class__.__name__, f)
-                type_ = Type.identify(v).name.lower()
-                current_graph.add_node(label, v, type_)
-                current_graph.tag_input(v)
-
-    def end_frame(self, *output_tuples):
-        global current_graph
-        assert current_graph
-        for tup in output_tuples:
-            for f in tup._fields:
-                v = getattr(tup, f)
-                label = '{}.{}'.format(tup.__class__.__name__, f)
-                type_ = Type.identify(v).name.lower()
-                class Unique: pass
-                current_graph.add_node(label, Unique, type_)
-                current_graph.tag_output(Unique)
-                current_graph.add_edge(v, Unique)
-
-
-        with open('frame-{:03}.dot'.format(self.frame_counter), 'w') as out:
-            out.write(current_graph.to_dot())
-        current_graph = None
-        self.pixel_counter = 0
-
-    def start_pixel(self, *input_tuples):
-        global current_graph
-        assert current_graph is None
-        current_graph = dag.Dag('Pixel')
-        for tup in input_tuples:
-            for f in tup._fields:
-                v = getattr(tup, f)
-                label = '{}.{}'.format(tup.__class__.__name__, f)
-                type_ = Type.identify(v).name.lower()
-                current_graph.add_node(label, v, type_)
-                current_graph.tag_input(v)
-
-    def end_pixel(self, *output_tuples):
-        global current_graph
-        assert current_graph
-        for tup in output_tuples:
-            for f in tup._fields:
-                v = getattr(tup, f)
-                label = '{}.{}'.format(tup.__class__.__name__, f)
-                type_ = Type.identify(v).name.lower()
-                class Unique: pass
-                current_graph.add_node(label, Unique, type_)
-                current_graph.tag_output(Unique)
-                current_graph.add_edge(v, Unique)
-        dotfile = 'pixel-{:03}-{:04}.dot'.format(self.frame_counter,
-                                                 self.pixel_counter)
-        with open(dotfile, 'w') as out:
-            out.write(current_graph.to_dot())
-        current_graph = None
-        self.pixel_counter += 1
 
     def scalar(self, value):
         result = Scalar(value)
@@ -375,6 +327,56 @@ class Numerics:
         result = Angle(radians=radians, degrees=degrees, units=units)
         record('angle\\n{:.4}'.format(result), result, Type.ANGLE, ())
         return result
+
+
+    def start_frame(self, *input_tuples):
+        self.frame_counter += 1
+        self._start_graph('Frame', *input_tuples)
+
+    def end_frame(self, *output_tuples):
+        self.pixel_counter = 0
+        dotfile = 'frame-{:03}.dot'.format(self.frame_counter)
+        self._end_graph(dotfile, *output_tuples)
+
+    def start_pixel(self, *input_tuples):
+        self._start_graph('Pixel', *input_tuples)
+
+    def end_pixel(self, *output_tuples):
+        dotfile = 'pixel-{:03}-{:04}.dot'.format(self.frame_counter,
+                                                 self.pixel_counter)
+        self.pixel_counter += 1
+        self._end_graph(dotfile, *output_tuples)
+
+
+    def _start_graph(self, title, *input_tuples):
+        global current_graph, cg_test_count
+        assert current_graph is None
+        current_graph = dag.Dag(title)
+        cg_test_count = 0
+        for tup in input_tuples:
+            for f in tup._fields:
+                v = getattr(tup, f)
+                label = '{}.{}'.format(tup.__class__.__name__, f)
+                type_ = Type.identify(v).name.lower()
+                current_graph.add_node(label, v, type_)
+                current_graph.tag_input(v)
+
+    def _end_graph(self, dotfile, *output_tuples):
+        global current_graph
+        assert current_graph
+        for tup in output_tuples:
+            for f in tup._fields:
+                v = getattr(tup, f)
+                out = copy.copy(v)
+                label = '{}.{}'.format(tup.__class__.__name__, f)
+                type_ = Type.identify(v)
+                record(label, out, type_, (v, ))
+                current_graph.tag_output(out)
+        current_graph.propagate_constants()
+        with open(dotfile, 'w') as out:
+            out.write(current_graph.to_dot())
+        current_graph = None
+
 
     def annotate_test(label):
         global next_test_label

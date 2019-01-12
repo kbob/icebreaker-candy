@@ -212,6 +212,7 @@ class Scene:
         return pixels
 
     def collect_pixels(self):
+        # return [[self.render_pixel(2, 47)]]
         return [
             [
                 self.render_pixel(ix, iy)
@@ -224,6 +225,7 @@ class Scene:
         x = self.numerics.scalar(ix)
         y = self.numerics.scalar(iy)
         pixel = namedtuple('Pixel', 'x y')(x, y)
+        # print('render_pixel({}, {})'.format(ix, iy))
         self.numerics.start_pixel(pixel,
                                   self.camera,
                                   self.sphere)
@@ -244,7 +246,7 @@ class Scene:
         color = self.trace(primary).to_unorm()
         pixel_color = namedtuple('Pixel', 'color')(color)
         self.numerics.end_pixel(pixel_color)
-        return color
+        return color.as_tuple()
 
     def trace(self, ray, primary=True):
         if primary:
