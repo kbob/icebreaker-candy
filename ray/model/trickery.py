@@ -4,6 +4,10 @@
 import inspect
 import os
 
+# Hashed signatures make dot files smaller and run faster, but have
+# less debugging information.
+HASH_SIGNATURES = False
+
 scalars = []
 vectors = []
 angles = []
@@ -43,6 +47,7 @@ def caller_signature(start=None, stop=None):
     """generate a unique signature for this point in program execution."""
 
     st = inspect.stack()
+    fr = None
     try:
         sig = []
         for fr in st[start:stop]:
@@ -50,9 +55,15 @@ def caller_signature(start=None, stop=None):
             line = fr.lineno
             func = fr.function
             last = fr.frame.f_lasti
-            s = f'{file}:{line}:{func}:{last}'
-            print(f'sig <= {s}')
-            sig.append((file, line, func, last))
-        return hash(tuple(sig))
+            if HASH_SIGNATURES:
+                sig.append((file, line, func, last))
+            else:
+                # print(f'sig <= {file}:{line}:{func}:{last}')
+                sig.append(f'{file}:{line}:{func}:{last}')
+        sig = tuple(sig)
+        if HASH_SIGNATURES:
+            sig = hash(sig)
+        return sig
     finally:
         del st
+        del fr

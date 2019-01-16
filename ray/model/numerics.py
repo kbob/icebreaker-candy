@@ -29,18 +29,20 @@ class Type(Enum):
 current_graph = None
 cg_test_count = 0
 
-def add_op_node(label, op, type):
+def add_op_node(label, op, type, sig):
     current_graph.add_node(label, op, type.name.lower())
     try:
         value_str = f'{op:.4}'
     except (TypeError, ValueError):
         value_str = f'{op}'
     current_graph.add_node_attr(op, 'value', value_str)
-
+    # sig = trickery.caller_signature(3, 6)
+    current_graph.add_node_attr(op, 'sig', str(sig))
 
 def record(label, op, type, predecessors):
     if current_graph:
-        add_op_node(label, op, type)
+        sig = trickery.caller_signature(2, 5)
+        add_op_node(label, op, type, sig)
         if type == Type.BOOL:
             assert not hasattr(current_graph, 'last_test')
             current_graph.last_test = op
@@ -56,7 +58,8 @@ def record(label, op, type, predecessors):
                 if p not in current_graph.node_map:
                     name = getattr(p, 'name', '')
                     label = 'const\\n{}\\n{:.3}'.format(name, p)
-                    add_op_node(label, p, Type.identify(p))
+                    sig = name or str(p)
+                    add_op_node(label, p, Type.identify(p), sig)
                     current_graph.tag_constant(p)
                 if p in current_graph.node_map:
                     current_graph.add_edge(p, op)
@@ -248,33 +251,6 @@ class Vec3(NumericBase):
             d, e, f = other._access_values()
             result = Vec3(a + d, b + e, c + f)
             record('add', result, Type.VECTOR, (self, other))
-            # import inspect
-            # cf = inspect.currentframe()
-            # of = inspect.getouterframes(cf)
-            # st = inspect.stack()
-            # try:
-            #     # print(type(st))
-            #     # print(type(st[0]))
-            #     print(st[0]._fields)
-            #     print(os.path.basename(st[0][1]), st[0][2], st[0][3])
-            #     print(os.path.basename(st[1][1]), st[1][2], st[1][3])
-            #     print(os.path.basename(st[2][1]), st[2][2], st[2][3])
-            #     # print(st[0][1:4])
-            #     # print(st[1][1:4])
-            #     # print(st[2][1:4])
-            #     # for f in st[2][1:4]:
-            #     #     print(f, hash(f))
-            #     # print(inspect.getframeinfo(cf)._fields)
-            #     # for frame in of:
-            #     #     print(type(frame))
-            #     #     i = frame
-            #     #     print(i.filename, i.lineno, i.function, hash(i[:3]))
-            #     # # print(of)
-            #     exit()
-            # finally:
-            #     del of
-            #     del cf
-            #     del st
             return result
         else:
             assert False, 'type(other) = {}'.format(type(other))
@@ -413,10 +389,11 @@ class Numerics:
         current_graph = dag.Dag(title)
         cg_test_count = 0
         for tup in input_tuples:
+            tup_name = tup.__class__.__name__
             for f in tup._fields:
                 v = getattr(tup, f)
-                label = '{}.{}'.format(tup.__class__.__name__, f)
-                add_op_node(label, v, Type.identify(v))
+                label = f'{tup_name}.{f}'
+                add_op_node(label, v, Type.identify(v), label)
                 current_graph.tag_input(v)
                 if getattr(v, 'constant', False):
                     current_graph.tag_constant(v)

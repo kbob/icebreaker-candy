@@ -154,7 +154,6 @@ class Scene:
         """
         S = self.numerics.scalar
 
-
         # For Y calc, just need frame number.
         frame64 = S(frame % 64)
         frame64m = S(frame % 64 - 64)
