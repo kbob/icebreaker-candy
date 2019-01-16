@@ -1,6 +1,8 @@
 # I should not do tricky things in Python.  I know that.
 # But I do them anyway.
 
+import inspect
+import os
 
 scalars = []
 vectors = []
@@ -16,6 +18,8 @@ def lazy_vec3(name, value):
 
 def lazy_angle(name, **kwargs):
     angles.append((name, kwargs))
+
+# lazy_unorm and lazy_bool not needed yet?
 
 def define_constants(namespace, numerics):
     # global the_namespace
@@ -33,15 +37,22 @@ def define_constants(namespace, numerics):
         a.name = name
         namespace[name] = a
 
-# def find_constant(obj):
-#     print('find_constant(id={} obj={})'.format(id(obj), obj))
-#     for (name, value) in scalars:
-#         if the_namespace[name] == obj:
-#             return (name, value, 'SCALAR')
-#     for (name, value) in vectors:
-#         print('vec namespace[{}] = (id={} obj={})'.format(name, id(the_namespace[name]), the_namespace[name]))
-#         if the_namespace[name] == obj:
-#             return (name, value, 'VECTOR')
-#     for (name, value) in angles:
-#         if the_namespace[name] == obj:
-#             return (name, value, 'ANGLE')
+
+def caller_signature(start=None, stop=None):
+
+    """generate a unique signature for this point in program execution."""
+
+    st = inspect.stack()
+    try:
+        sig = []
+        for fr in st[start:stop]:
+            file = os.path.basename(fr.filename)
+            line = fr.lineno
+            func = fr.function
+            last = fr.frame.f_lasti
+            s = f'{file}:{line}:{func}:{last}'
+            print(f'sig <= {s}')
+            sig.append((file, line, func, last))
+        return hash(tuple(sig))
+    finally:
+        del st

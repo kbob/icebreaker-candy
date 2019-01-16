@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from itertools import chain
+import os
 import sys
 
 import PIL.Image
@@ -130,7 +131,17 @@ def test_numerics():
     #
     # print('MY_VAR = {}'.format(MY_VAR))
 
+
+def derandomize_hash():
+    if 'PYTHONHASHSEED' not in os.environ:
+        environ = dict(os.environ)
+        environ['PYTHONHASHSEED'] = '3'
+        argv = [sys.executable] + sys.argv
+        os.execve(sys.executable, argv, environ)
+
+
 if __name__ == '__main__':
+    derandomize_hash()
     if '-t' in sys.argv:
         test_numerics()
     elif '-a' in sys.argv:

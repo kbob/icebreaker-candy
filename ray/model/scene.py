@@ -115,7 +115,7 @@ class Scene:
         self.cam_pos_u = 0
         self.cam_pos_v = 0
         self.sphere_pos_x = 0
-        self.sphere_pos_z = +5
+        self.sphere_pos_z = 0 - 16
         self.sphere_inc_x = +7 / 2**5
         self.sphere_inc_z = +4 / 2**5
 

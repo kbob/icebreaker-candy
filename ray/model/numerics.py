@@ -1,6 +1,7 @@
 import copy
 from enum import Enum, auto
 import math
+import os
 
 import dag
 import trickery
@@ -21,30 +22,42 @@ class Type(Enum):
             Angle: cls.ANGLE,
             Vec3: cls.VECTOR,
             RGBUnorm: cls.RGBUNORM,
+            Boolean: cls.BOOL,
         }.get(type(obj), cls.UNDEF)
 
 
 current_graph = None
 cg_test_count = 0
 
+def add_op_node(label, op, type):
+    current_graph.add_node(label, op, type.name.lower())
+    try:
+        value_str = f'{op:.4}'
+    except (TypeError, ValueError):
+        value_str = f'{op}'
+    current_graph.add_node_attr(op, 'value', value_str)
+
+
 def record(label, op, type, predecessors):
     if current_graph:
-        current_graph.add_node(label, op, type.name.lower())
-        if type == Type.BOOL and hasattr(current_graph, 'next_test_label'):
-            current_graph.annotate_test(op, current_graph.next_test_label)
-            del current_graph.next_test_label
+        add_op_node(label, op, type)
+        if type == Type.BOOL:
+            assert not hasattr(current_graph, 'last_test')
+            current_graph.last_test = op
+        elif hasattr(current_graph, 'last_test'):
+            lt = current_graph.last_test
+            current_graph.add_edge(lt, op)
+            assert current_graph.node_map[lt].type == 'bool'
+            del current_graph.last_test
         if not predecessors:
             current_graph.tag_constant(op)
         else:
             for p in predecessors:
                 if p not in current_graph.node_map:
-                    # (name, value, type_) = trickery.find_constant(p)
                     name = getattr(p, 'name', '')
                     label = 'const\\n{}\\n{:.3}'.format(name, p)
-                    type_ = Type.identify(p).name.lower()
-                    current_graph.add_node(label, p, type_)
+                    add_op_node(label, p, Type.identify(p))
                     current_graph.tag_constant(p)
-                # assert p in current_graph.node_map, str(p)
                 if p in current_graph.node_map:
                     current_graph.add_edge(p, op)
 
@@ -121,7 +134,7 @@ class Scalar(NumericBase):
 
     def __lt__(self, other):
         assert other == 0, 'must compare to zero'
-        result = self.value < 0
+        result = Boolean(self.value < 0)
         global cg_test_count
         label = '{}\\nis_neg\\n{}'.format(cg_test_count, result)
         cg_test_count += 1
@@ -235,6 +248,33 @@ class Vec3(NumericBase):
             d, e, f = other._access_values()
             result = Vec3(a + d, b + e, c + f)
             record('add', result, Type.VECTOR, (self, other))
+            # import inspect
+            # cf = inspect.currentframe()
+            # of = inspect.getouterframes(cf)
+            # st = inspect.stack()
+            # try:
+            #     # print(type(st))
+            #     # print(type(st[0]))
+            #     print(st[0]._fields)
+            #     print(os.path.basename(st[0][1]), st[0][2], st[0][3])
+            #     print(os.path.basename(st[1][1]), st[1][2], st[1][3])
+            #     print(os.path.basename(st[2][1]), st[2][2], st[2][3])
+            #     # print(st[0][1:4])
+            #     # print(st[1][1:4])
+            #     # print(st[2][1:4])
+            #     # for f in st[2][1:4]:
+            #     #     print(f, hash(f))
+            #     # print(inspect.getframeinfo(cf)._fields)
+            #     # for frame in of:
+            #     #     print(type(frame))
+            #     #     i = frame
+            #     #     print(i.filename, i.lineno, i.function, hash(i[:3]))
+            #     # # print(of)
+            #     exit()
+            # finally:
+            #     del of
+            #     del cf
+            #     del st
             return result
         else:
             assert False, 'type(other) = {}'.format(type(other))
@@ -297,6 +337,18 @@ class Vec3(NumericBase):
         return result
 
 
+class Boolean(NumericBase):
+
+    def __init__(self, value):
+        self.value = value
+
+    def __bool__(self):
+        return self.value
+
+    def __repr__(self):
+        return ['false', 'true'][self.value]
+
+
 class RGBUnorm(NumericBase):
 
     def __init__(self, r, g, b):
@@ -339,15 +391,18 @@ class Numerics:
 
     def end_frame(self, *output_tuples):
         self.pixel_counter = 0
-        dotfile = 'frame-{:03}.dot'.format(self.frame_counter)
+        fnum = '{:03}'.format(self.frame_counter)
+        dotfile = 'frame-{}.dot'.format(fnum)
+        dotfile = os.path.join('dot', fnum, dotfile)
         self._end_graph(dotfile, *output_tuples)
 
     def start_pixel(self, *input_tuples):
         self._start_graph('Pixel', *input_tuples)
 
     def end_pixel(self, *output_tuples):
-        dotfile = 'pixel-{:03}-{:04}.dot'.format(self.frame_counter,
-                                                 self.pixel_counter)
+        fnum = '{:03}'.format(self.frame_counter)
+        dotfile = 'pixel-{}-{:04}.dot'.format(fnum, self.pixel_counter)
+        dotfile = os.path.join('dot', fnum, dotfile)
         self.pixel_counter += 1
         self._end_graph(dotfile, *output_tuples)
 
@@ -361,8 +416,7 @@ class Numerics:
             for f in tup._fields:
                 v = getattr(tup, f)
                 label = '{}.{}'.format(tup.__class__.__name__, f)
-                type_ = Type.identify(v).name.lower()
-                current_graph.add_node(label, v, type_)
+                add_op_node(label, v, Type.identify(v))
                 current_graph.tag_input(v)
                 if getattr(v, 'constant', False):
                     current_graph.tag_constant(v)
@@ -384,11 +438,7 @@ class Numerics:
         for (v, out) in sinks:
             if current_graph.is_constant(out):
                 v.constant = True
+        os.makedirs(os.path.dirname(dotfile), exist_ok=True)
         with open(dotfile, 'w') as out:
             out.write(current_graph.to_dot())
         current_graph = None
-
-
-    def annotate_test(label):
-        global next_test_label
-        next_test_label = label
