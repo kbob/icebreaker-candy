@@ -39,9 +39,10 @@ def add_op_node(label, op, type, sig):
     # sig = trickery.caller_signature(3, 6)
     current_graph.add_node_attr(op, 'sig', str(sig))
 
-def record(label, op, type, predecessors):
+def record(label, op, type, predecessors, sig=None):
     if current_graph:
-        sig = trickery.caller_signature(2, 5)
+        if sig is None:
+            sig = trickery.caller_signature(2, 5)
         add_op_node(label, op, type, sig)
         if type == Type.BOOL:
             assert not hasattr(current_graph, 'last_test')
@@ -408,7 +409,7 @@ class Numerics:
                 out = copy.copy(v)
                 label = '{}.{}'.format(tup.__class__.__name__, f)
                 type_ = Type.identify(v)
-                record(label, out, type_, (v, ))
+                record(label, out, type_, (v, ), sig=label)
                 current_graph.tag_output(out)
                 sinks.append((v, out))
         current_graph.propagate_constants()

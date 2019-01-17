@@ -3,7 +3,7 @@ import io
 
 
 class Node(namedtuple('Node', 'name label obj type attrs')):
-
+    # Use a subclass so clients can add attributes.
     def __hash__(self):
         # attrs is mutable; does not hash.
         return hash(self[:-1])
@@ -13,6 +13,7 @@ class Node(namedtuple('Node', 'name label obj type attrs')):
 
 
 class Edge(namedtuple('Edge', 'src dst')):
+    # Use a subclass so clients can add attributes.
     pass
 
 
@@ -21,7 +22,7 @@ class Dag:
     def __init__(self, name):
         self.name = name
         self.node_count = 0
-        self.nodes = set()
+        self._nodes = set()
         self.edges = []
         self.node_map = {}
         self.inputs = set()
@@ -35,7 +36,7 @@ class Dag:
             new_name = 'node{:03}'.format(self.node_count)
             self.node_count += 1
             new_node = Node(new_name, label, obj, type, {})
-            self.nodes.add(new_node)
+            self._nodes.add(new_node)
             self.node_map[obj] = new_node
 
     def add_edge(self, source, dest):
@@ -83,7 +84,7 @@ class Dag:
         done = False
         while not done:
             done = True
-            for node in self.nodes:
+            for node in self._nodes:
                 if node in self.constants:
                     continue
                 pred = node.predecessors(self)
@@ -94,7 +95,7 @@ class Dag:
     def to_dot(self):
         with io.StringIO() as f:
             print('digraph {} {{'.format(self.name), file=f)
-            for n in sorted(self.nodes, key=lambda n: n.name):
+            for n in sorted(self._nodes, key=lambda n: n.name):
                 i = n in self.inputs
                 o = n in self.outputs
                 c = n in self.constants
