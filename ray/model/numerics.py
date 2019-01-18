@@ -102,7 +102,6 @@ class Scalar(NumericBase):
             record('add', result, Type.SCALAR, (self, other))
             return result
         elif isinstance(other, Vec3):
-            print('S + V')
             a, b, c = other.values
             result = Vec3(self + a, self + b, self + c)
             record('add', result, Type.VECTOR, (self, other))

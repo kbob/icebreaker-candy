@@ -218,6 +218,7 @@ def check_constants(node_lists):
                 label = short_label(nodes[0])
                 print(f'ERROR: const node {label} has multiple values {values}')
 
+
 def print_value_ranges(node_lists, heading):
     print(heading)
     print()
@@ -240,6 +241,36 @@ def print_value_ranges(node_lists, heading):
     print()
 
 
+def glonk(node_lists):
+    for (i, nodes) in enumerate(node_lists):
+        n0 = nodes[0]
+        print(i, len(nodes), n0)
+
+def flonk(dags_by_path, node_lists):
+    edge_map = set()
+    for (path, dags) in dags_by_path.items():
+        g = dags[0]
+        for edge in g.edges:
+            ssig = edge.src.attrs['sig']
+            dsig = edge.dst.attrs['sig']
+            edge_map.add((ssig, dsig))
+    print(len(edge_map))
+    print()
+    def node_cmp(n0, n1):
+        sig0 = n0.src.attrs['sig']
+        sig1 = n1.src.attrs['sig']
+        if (sig0, sig1) in edge_map:
+            return -1
+        elif (sig1, sig0) in edge_map:
+            return +1
+        else:
+            return cmp(n0.name, n1.name)
+    sorted_nodes = sorted(node_lists, cmp=node_cmp)
+    for (i, nodes) in enumerate(sorted_nodes):
+        n0 = nodes[0]
+        print(i, n0)
+
+
 def analyze():
     frame_dags, pixel_dags = read_dags()
     frame_dags_by_path = group_dags_by_path(frame_dags)
@@ -254,6 +285,11 @@ def analyze():
 
     print_value_ranges(frame_dag_nodes, 'FRAME NODE RANGES')
     print_value_ranges(pixel_dag_nodes, 'PIXEL NODE RANGES')
+
+    # next: generate merged graph as dotfile.
+    # glonk(frame_dag_nodes)
+    # glonk(pixel_dag_nodes)
+    flonk(pixel_dags_by_path, pixel_dag_nodes)
 
 
 if __name__ == '__main__':
