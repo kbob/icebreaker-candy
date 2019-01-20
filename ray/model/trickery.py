@@ -26,18 +26,21 @@ def lazy_angle(name, **kwargs):
 # lazy_unorm and lazy_bool not needed yet?
 
 def define_constants(namespace, numerics):
-    # global the_namespace
-    # the_namespace = namespace
     for (name, value) in scalars:
-        s = numerics.scalar(value)
+        sig = f'{name} = {float(value):.04}'
+        s = numerics.scalar(value, sig=sig)
         s.name = name
         namespace[name] = s
     for (name, value) in vectors:
-        v = numerics.vec3(*value)
+        sig = (f'{name} = ({float(value[0]):.04} '
+                         f'{float(value[1]):.04} '
+                         f'{float(value[2]):.04})')
+        v = numerics.vec3(*value, sig=sig)
         v.name = name
         namespace[name] = v
     for (name, kwargs) in angles:
-        a = numerics.angle(**kwargs)
+        sig = f'{name} = {kwargs}'
+        a = numerics.angle(**kwargs, sig=sig)
         a.name = name
         namespace[name] = a
 

@@ -2,12 +2,16 @@ from collections import namedtuple
 from trickery import lazy_scalar, lazy_vec3, lazy_angle, define_constants
 
 
+UGLY_BUT_THOROUGH = True
+
+
 # Numeric constants are defined lazily.  When the caller passes in an
 # implementation of Numerics, we can evaluate these in that numeric
 # context.
 
 lazy_scalar('EPSILON', 1.0e-3)
 # lazy_scalar('ONE_HALF', 0.5)
+lazy_scalar('ONE', 1)
 lazy_scalar('TWO', 2)
 # lazy_scalar('THREE', 3)
 # lazy_scalar('FIVE', 5)
@@ -46,7 +50,7 @@ lazy_scalar('SPHERE_ALPHA', 0.3)
 
 
 def lerp(a, b, frac):
-    return (frac.__class__(1) - frac) * a + frac * b
+    return (ONE - frac) * a + frac * b
 
 
 Ray = namedtuple('Ray', 'origin direction')
@@ -115,7 +119,9 @@ class Scene:
         self.cam_pos_u = 0
         self.cam_pos_v = 0
         self.sphere_pos_x = 0
-        self.sphere_pos_z = 0 - 16
+        self.sphere_pos_z = 0
+        if UGLY_BUT_THOROUGH:
+            self.sphere_pos_z = -16
         self.sphere_inc_x = +7 / 2**5
         self.sphere_inc_z = +4 / 2**5
 
@@ -126,8 +132,11 @@ class Scene:
         """Precalculate the camera parameters that don't require DSP.
            Return a record of DSP pipeline inputs.
         """
+        v_inc = 3
+        if UGLY_BUT_THOROUGH:
+            v_inc = 513
         self.cam_pos_u = (self.cam_pos_u + 2) % 1024
-        self.cam_pos_v = (self.cam_pos_v + 3) % 1024
+        self.cam_pos_v = (self.cam_pos_v + v_inc) % 1024
         pos_u = self.numerics.angle(units=self.cam_pos_u)
         pos_v = self.numerics.angle(units=self.cam_pos_v)
         PreCam = namedtuple('PreCam', 'pos_u pos_v')
@@ -156,7 +165,7 @@ class Scene:
 
         # For Y calc, just need frame number.
         frame64 = S(frame % 64)
-        frame64m = S(frame % 64 - 64)
+        frame64m = S(63 - frame % 64)
 
         # Can precalc X and Z coordinates.
         SPHERE_MIN_X = SPHERE_MIN_Z = -16
@@ -185,11 +194,7 @@ class Scene:
 
     def calc_sphere(self, pre_sphere):
         """Finish calculating sphere using DSP operations."""
-        # S = self.numerics.scalar
-        # sphere_radius = S(SPHERE_RADIUS)
-
-        y_accel = self.numerics.scalar(-7 / 1024)
-        # XXX eliminate negative number
+        y_accel = self.numerics.scalar(7 / 1024)
         q = pre_sphere.frame64 * pre_sphere.frame64m
         center_x = pre_sphere.center_x
         center_y = q * y_accel + SPHERE_RADIUS

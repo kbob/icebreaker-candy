@@ -1,24 +1,28 @@
 #!/usr/bin/env python
 
+import argparse
 from itertools import chain
+import math
 import os
 import sys
 
 import PIL.Image
 
-import numerics
+import simple_numerics
+import dag_numerics
+import sexpr_numerics
+import log_numerics
 import scene
-from trickery import lazy_scalar, define_constants
 
 
 WIDTH, HEIGHT = 64, 64
 # WIDTH, HEIGHT = 256, 256
-FRAME_COUNT = 2
+# FRAME_COUNT = 2
 
 
-def make_image():
+def make_image(numz_module):
 
-    numz = numerics.Numerics()
+    numz = numz_module.Numerics()
     my_scene = scene.Scene(WIDTH, HEIGHT, numerics=numz)
     pixels = my_scene.render_scene()
 
@@ -27,12 +31,12 @@ def make_image():
     img.save('scene.png')
 
 
-def make_animation():
-    numz = numerics.Numerics()
+def make_animation(frame_count, numz_module):
+    numz = numz_module.Numerics()
     my_scene = scene.Scene(WIDTH, HEIGHT, numerics=numz)
     imgs = []
 
-    for (frame, pixels) in enumerate(my_scene.render_anim(FRAME_COUNT)):
+    for (frame, pixels) in enumerate(my_scene.render_anim(frame_count)):
         img = PIL.Image.new(mode='RGB', size=(WIDTH, HEIGHT))
         img.putdata(list(chain(*pixels)))
         if frame == 0:
@@ -49,8 +53,8 @@ def make_animation():
              loop=100)
 
 
-def test_numerics():
-    numz = numerics.Numerics()
+def test_numerics(numz_module):
+    numz = numz_module.Numerics()
 
     s = numz.scalar(3)
     v = numz.vec3(1, 2, 3)
@@ -59,6 +63,9 @@ def test_numerics():
     print('s', s)
     print('v', v)
     print('a', a)
+    assert s.value == 3
+    assert v._access_values() == [1, 2, 3]
+    assert a.radians == math.pi / 3
     # print('s = {:.2}'.format(numerics.scalar(2/3)))
     # vv = numerics.vec3(1/3, 1/7, 1/9)
     # print('vv = {:.2}'.format(vv))
@@ -140,11 +147,43 @@ def derandomize_hash():
         os.execve(sys.executable, argv, environ)
 
 
-if __name__ == '__main__':
+def main(argv):
     derandomize_hash()
-    if '-t' in sys.argv:
-        test_numerics()
-    elif '-a' in sys.argv:
-        make_animation()
+    parser = argparse.ArgumentParser(description='Annotated Ray Tracer')
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument('-t', '--test',
+        action='store_true',
+        help='run self-test')
+    action.add_argument('-i', '--image',
+        action='store_true',
+        help='generate static image')
+    action.add_argument('-a', '--animate',
+        action='store_true',
+        help='generate animation')
+    parser.add_argument('-n', '--numerics',
+        choices=('simple', 'dag', 'sexpr', 'log'),
+        default='simple',
+        help='choose numeric implementation')
+    parser.add_argument('-f', '--frames',
+        type=int,
+        default=2,
+        metavar='N',
+        help='number of animation frames')
+    args = parser.parse_args(argv[1:])
+
+    numz = {
+        'simple': simple_numerics,
+        'dag': dag_numerics,
+        'sexpr': sexpr_numerics,
+        'log': log_numerics,
+    }[args.numerics]
+    if args.test:
+        test_numerics(numz)
+    elif args.animate:
+        make_animation(args.frames, numz)
     else:
-        make_image()
+        make_image(numz)
+
+
+if __name__ == '__main__':
+    main(sys.argv)

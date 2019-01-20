@@ -13,4 +13,5 @@
 *.vcd
 a.out
 gen_*_table
+log
 /sim/target
