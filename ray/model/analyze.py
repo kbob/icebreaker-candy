@@ -209,10 +209,6 @@ def collect_insts(traces):
 
 
 def trace_exemplars(traces_by_path):
-    # return sorted((min(traces, key=lambda l: l[0].id)
-    #                for traces in traces_by_path.values()),
-    #               key=lambda t: t.path)
-
     return sorted((traces[0] for traces in traces_by_path.values()),
                   key=lambda t: t.path)
 
@@ -309,63 +305,29 @@ def merge_paths(exemplars):
             if not ra.label.placed:
                 ra.label.place()
             code.append(ra.label)
-            # print('sig0', sig0)
-            # print('ra.label', ra.label)
-            # print('ra.traces', sorted(t.path for t in ra.traces))
-            # print('active_traces', sorted(t.path for t in active_traces))
-            # print('inactive_traces', sorted(t.path for t in inactive_traces))
-            # print()
-            # assert all(t in inactive_traces for t in ra.traces)
             active_traces.extend(ra.traces)
-            # for t in ra.traces:
-            #     inactive_traces.remove(t)
             ra.traces.clear()
-            # del reactivations[sig0]
-        # for i in inactive_traces[:]:
-        #     if i.reactivation == sig0:
-        #         # print(f'reactivating {i.path} at {sig0}')
-        #         # inactive_traces.remove(i)
-        #         # active_traces.append(i)
-        #         del i.reactivation
-        # if not all(a[a.pc].sig == sig0 for a in active_traces):
-        #     print('about to fail:')
-        #     for a in active_traces:
-        #         print(f'{a.path:10} {a[a.pc]}')
-        #     print()
         assert all(a[a.pc].sig == sig0 for a in active_traces)
         if inst0.is_test:
-            # print(f'At test {inst0}')
             active_traces, b = partition(active_traces)
             for t in sorted(b, key=lambda t: t.path):
                 t.pc += 1
-                # t.reactivation = t[t.pc].sig
                 s = t[t.pc].sig
                 if s not in reactivations:
-                    # print(f'Adding label for {s}')
                     reactivations[s] = Reactivation(Label(), [])
-                    # print(f'Adding label {reactivations[s].label} for {s}')
                 reactivations[s].traces.append(t)
                 label = reactivations[s].label
-                # print(f'deactivating {t.path}')
-            # inactive_traces.extend(b)
-            # xxx = sorted(t.path for t in active_traces)
-            # print(f'active: {" ".join(xxx)}')
             a0 = active_traces[0]
             t0 = a0[a0.pc]
-            # print(t0)
-            # print(t0.value)
             op = {'false': 'bneg.s', 'true': 'bnneg.s'}[t0.value]
             branch = t0._replace(op=op, operands=tuple((label, *t0.operands)))
             code.append(branch)
             code.append('')
-            # print()
         else:
-            # print(f'Emitting {inst0}')
             code.append(inst0)
         for a in active_traces:
             a.pc += 1
             if a.pc >= len(a):
-                # print(f'completed {a.path}')
                 active_traces.remove(a)
         if not active_traces:
             code.append('done')
@@ -376,61 +338,12 @@ def merge_paths(exemplars):
                         return max(len(t) for t in ra.traces)
                     return 0
                 sig0, ra = max(reactivations.items(), key=ra_score)
-                               #
-                               # # key=lambda it: len(it[1].traces[0]))
-                               # key=lambda it: it[1].traces and
-                               #                max(it[1].traces, key=len))
                 active_traces.extend(ra.traces)
-                # for t in ra.traces:
-                #     inactive_traces.remove(t)
                 ra.traces.clear()
 
-            # if inactive_traces:
-            #     # print('inactive_traces',
-            #     #       sorted(t.path for t in inactive_traces))
-            #     # print('reactivations')
-            #     # for ra in reactivations.values():
-            #     #     print('  ', ra.label,
-            #     #           sorted(t.path for t in ra.traces))
-            #     # print()
-            #     it0 = max(inactive_traces, key=len)
-            #     sig0 = it0[it0.pc].sig
-            #     for it in inactive_traces[:]:
-            #         if it[it.pc].sig == sig0:
-            #             # print(f'restarting {it.path}')
-            #             inactive_traces.remove(it)
-            #             active_traces.append(it)
-            #             reactivations[sig0].traces.remove(it)
-            #     # code.append(reactivations[sig0].label)
-            #     # code.append('xyzzy')
     assert not active_traces
-    # assert not inactive_traces
+    assert not any(ra.traces for ra in reactivations.values())
     return code
-
-    # active is a subset of traces
-    # inactive is a subset of traces
-    #
-
-    # active = all traces
-    # while True:
-    #     assert all active traces are at same inst.
-    #     for inactive traces:
-    #         if next inst is reactivation point:
-    #             reactivate trace
-    #     step through to first branch
-    #     partition active traces by successor inst.
-    #     assert successor partition matches T/F partition.
-    #     for i in successors:
-    #         if i in any traces in the other partition,
-    #              i comes first.
-    #         assert only one successor comes first.
-    #         deactivate traces in other partition, set reactivation point
-    #         to
-    #     step active traces to next instruction
-    #
-    #
-    #     look at successor insts.  (assert they match T/F)
-    #     for each successor, find out whether it appears in the other
 
 
 def canon_ids(code, maps):
