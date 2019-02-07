@@ -27,20 +27,20 @@ def lazy_angle(name, **kwargs):
 
 def define_constants(namespace, numerics):
     for (name, value) in scalars:
-        sig = f'{name} = {float(value):.04}'
-        s = numerics.scalar(value, sig=sig)
+        # sig = f'{name} = {float(value):.04}'
+        s = numerics.scalar(value, sig=name)
         s.name = name
         namespace[name] = s
     for (name, value) in vectors:
-        sig = (f'{name} = ({float(value[0]):.04} '
-                         f'{float(value[1]):.04} '
-                         f'{float(value[2]):.04})')
-        v = numerics.vec3(*value, sig=sig)
+        # sig = (f'{name} = ({float(value[0]):.04} '
+        #                  f'{float(value[1]):.04} '
+        #                  f'{float(value[2]):.04})')
+        v = numerics.vec3(*value, sig=name)
         v.name = name
         namespace[name] = v
     for (name, kwargs) in angles:
-        sig = f'{name} = {kwargs}'
-        a = numerics.angle(**kwargs, sig=sig)
+        # sig = f'{name} = {kwargs}'
+        a = numerics.angle(**kwargs, sig=name)
         a.name = name
         namespace[name] = a
 

@@ -1,295 +1,494 @@
 #!/usr/bin/env python3
 
-# Read all the dotfiles.
-# Generate each graph's signature.
-# Check for missing signatures.
-
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, namedtuple
+import copy
+from itertools import count
 import os
 from pprint import pprint
 import re
-import sys
 
 import dag
 
 
-# Collect regular expressions here to make them easy to find.
-# Names are "verb_object" where verb is an re method name.
-# Verbose syntax might be more readable; IDK.
-
-match_node = re.compile(r'''
-    (?P<name> node\d+ )
-    [ ]
-    \[
-        (?P<attrs> .* )
-    \];
-    \Z
-    ''', re.VERBOSE).match
-
-match_edge = re.compile(r'''
-    (?P<src>node\d+)
-    [ ] -> [ ]
-    (?P<dst>node\d+)
-    [ ]
-    \[
-        (?P<attrs>.*)
-    \];
-    \Z
-    ''', re.VERBOSE).match
-
-find_attrs = re.compile(r'''
-    (?P<name> \w+ )
-    =
-    (?:
-        (?P<v0> \w+ )   # unquoted word
-     |
-        "
-        (?P<v1> .*? )   # quoted string
-        "
+match_inst = re.compile(r'''
+    \s*
+    (?P<op> [\.\w]+ )
+    \s+
+    (?P<id> t \d+ )
+    \s+
+    (?P<operands>
+        (?:
+            t \d+ (?: \s* , \s* t \d+ )*
+        )?
     )
+    \s*
+    \#
+    \s*
+    " (?P<value> .*? ) "
+    \s*
+    (?P<sig> .*? )
+    \s*
+    \Z
+    ''', re.VERBOSE).match
+
+find_operands = re.compile(r'''
+    t \d+
     ''', re.VERBOSE).findall
 
-split_on_entities = re.compile(r'''
-    & .*? ;
-    ''', re.VERBOSE).split
+match_begin_frame = re.compile(r'''
+    \s* \# \s* BEGIN \s+
+    frame \s+ (?P<frame> \d+ ) \s*
+    \Z
+    ''', re.VERBOSE).match
 
-match_branch_label = re.compile(r'''
-    (?P<index> \d+ )
-    \\n
-    is_neg
-    \\n
+match_end_frame = re.compile(r'''
+    \s* \# \s* END \s+
+    frame \s+ (?P<frame> \d+ ) \s*
+    \Z
+    ''', re.VERBOSE).match
+
+match_begin_pixel = re.compile(r'''
+    \s* \# \s* BEGIN \s+
+    frame \s+ (?P<frame> \d+ ) \s+
+    pixel \s+ (?P<pixel> \d+ ) \s*
+    \Z
+    ''', re.VERBOSE).match
+
+match_end_pixel = re.compile(r'''
+    \s* \# \s* END \s+
+    frame \s+ (?P<frame> \d+ ) \s+
+    pixel \s+ (?P<pixel> \d+ ) \s*
+    \Z
     ''', re.VERBOSE).match
 
 
-class HashSnowflake:
-    """Each one is a special snowflake.
-       Wrap a non-unique object in an object that has a unique hash value.
+class Inst(namedtuple('Inst', 'id op operands sig value')):
 
-       This should probably be in trickery.
-    """
-    def __init__(self, obj):
-        self.obj = obj
-
-    def __hash__(self):
-        return id(self)
+    @classmethod
+    def from_str(cls, str):
+        m = match_inst(str)
+        if m:
+            d = dict(m.groupdict())
+            d['operands'] = tuple(find_operands(d['operands']))
+            return cls(**d)
 
     def __repr__(self):
-        return repr(self.obj)
+        op = self.op
+        id = self.id
+        operands = ', '.join(str(o) for o in self.operands)
+        value = self.value
+        sig = self.sig
+        # if len(sig) > 30:
+        #     sig = sig[:27] + "..."
+        return f'{op:8} {id:6} {operands:19} # "{value}" {sig}'
+
+    @property
+    def is_test(self):
+        return self.op in {'is_neg.s', 'bneg.s', 'bnneg.s'}
+        # return self.op.startswith('is_') or self.op.startswith('b')
+
+    @property
+    def is_const(self):
+        if self.op not in {'scalar', 'vec.sss', 'angle'}:
+            return False
+        return not self.sig.startswith('(')
 
 
-def numeric_value(node):
-    str_value = node.attrs['value']
-    if node.type == 'scalar':
-        return float(str_value)
-    elif node.type == 'vector':
-        return tuple(float(i) for i in str_value[1:-1].split())
-    elif node.type == 'angle':
-        return float(split_on_entities(str_value)[1])
-    elif node.type == 'bool':
-        return bool(str_value.title())
-    elif node.type == 'rgbunorm':
-        return int(str_value.lstrip('#'), 0x10)
-    else:
-        assert False, f'unknown node type {node.type}'
+class Trace(list):
+
+    def __init__(self, iterable=(), name=''):
+        super().__init__(iterable)
+        self.name = name
+
+    def __repr__(self):
+        try:
+            return self.path
+        except AttributeError:
+            return repr(super())
 
 
-def short_label(node):
-    label = node.label
-    m = match_branch_label(label)
-    if m:
-        label = f'branch {m.group("index")}'
-    label = label.replace(r'\n', ' ')
-    return label
+class Traces(namedtuple('Sections', 'extern frames pixels')):
+    pass
 
 
-def read_dotfiles():
-    i = 0
-    for (dir, subdirs, files) in os.walk('dot'):
-        files.sort()
-        for f in files:
-            if f.endswith('.dot'):
-                g= read_dotfile(os.path.join(dir, f))
-                yield g
-                i += 1
-                # if i % 100 == 0:
-                #     break
+class Maps(namedtuple('Maps', 'id2sig sig2id')):
+    pass
+
+class Label:
+    """A label names a code location.  A label's name is not defined
+       until the label is placed.
+    """
+
+    counter = 0
+
+    def __init__(self):
+        self.traces = []
+        self._name = None
+
+    def __repr__(self):
+        return self.name
+
+    @property
+    def placed(self):
+        return self._name is not None
+
+    @property
+    def name(self):
+        if self.placed:
+            return self._name
+        return f'<unplaced Label {id(self)}>'
+
+    def place(self):
+        assert not self.placed
+        self._name = f'L{type(self).counter}'
+        type(self).counter += 1
 
 
-def read_dotfile(path):
-    # print(f'reading {path}')
-    with open(path) as f:
-        title = os.path.splitext(os.path.basename(path))[0]
-        g = dag.Dag(title)
-        node_map = {}
-        for line in f:
-            line = line.strip()
-            if line.startswith('digraph'):
+def read_log(file_name='log'):
+    extern = Trace()
+    frames = []
+    pixels = defaultdict(Trace)
+    current = extern
+    with open(file_name) as log:
+        for line in log:
+            line = line.rstrip('\n')
+            inst = Inst.from_str(line)
+            if inst:
+                current.append(inst)
                 continue
-            if line == '}':
-                continue
-            m = match_node(line)
+
+            m = match_begin_frame(line)
             if m:
-                name, attrs = m.groups()
-                attrs = {key: v0 + v1 for (key, v0, v1) in find_attrs(attrs)}
-                node_obj = HashSnowflake(attrs['label'])
-                node_map[name] = node_obj
-                g.add_node(attrs['label'], node_obj, attrs['type'])
-                g.add_node_attr(node_obj, 'value', attrs['value'])
-                g.add_node_attr(node_obj, 'sig', attrs['sig'])
-                if attrs.get('input', False):
-                    g.tag_input(node_obj)
-                if attrs.get('output', False):
-                    g.tag_output(node_obj)
-                if attrs.get('const', False):
-                    g.tag_constant(node_obj)
-                    g.add_node_attr(node_obj, 'const', True)
-                if attrs.get('test', False):
-                    g.tag_test(node_obj)
-            else:
-                m = match_edge(line)
-                if m:
-                    # print('edge', m.groupdict())
-                    src, dst, attrs = m.groups()
-                    src = node_map[src]
-                    dst = node_map[dst]
-                    attrs = {k: v0 + v1 for (k, v0, v1) in find_attrs(attrs)}
-                    g.add_edge(src, dst)
-                    # discard edge attributes
-                else:
-                    print('no match', repr(line), file=sys.stderr)
-                    raise RuntimeError(path)
-    return g
+                frame = int(m.group('frame'))
+                while frame >= len(frames):
+                    frames.append(Trace(name=f'frame {frame}'))
+                current = frames[frame]
+                continue
 
+            m = match_end_frame(line)
+            if m:
+                current = extern
+                continue
 
-def read_dags():
-    frame_dags = []
-    pixel_dags = []
-    for g in read_dotfiles():
-        if g.name.startswith('frame'):
-            frame_dags.append(g)
-        else:
-            assert g.name.startswith('pixel')
-            pixel_dags.append(g)
-    return (frame_dags, pixel_dags)
+            m = match_begin_pixel(line)
+            if m:
+                frame = int(m.group('frame'))
+                pixel = int(m.group('pixel'))
+                current = pixels[(frame, pixel)]
+                current.name = f'frame {frame} pixel {pixel}'
+                continue
 
+            m = match_end_pixel(line)
+            if m:
+                current = extern
+                continue
 
-def branch_signature(g):
-    sig = ''
-    for n in sorted(g._nodes):
-        if n in g.tests:
-            sig += {True: 'T', False: 'F'}[numeric_value(n)]
-    return sig
+            print('WARNING: unrecognized')
+            print('   ', line)
+            print()
+    return Traces(extern, frames, pixels)
 
-def group_dags_by_path(dags):
+def group_traces_by_path(traces):
     by_path = defaultdict(list)
-    for g in dags:
-        by_path[branch_signature(g)].append(g)
+    for trace in traces:
+        path = ''
+        for i in trace:
+            if i.is_test:
+                path += i.value[0]
+        trace.path = path
+        by_path[path].append(trace)
     return by_path
 
-def collect_nodes(dags):
-    by_sig = defaultdict(list)
-    for g in dags:
-        for n in g._nodes:
-            by_sig[n.attrs['sig']].append(n)
-    return sorted(by_sig.values(), key=lambda nl: nl[0].name)
+
+def collect_insts(traces):
+    insts = defaultdict(list)
+    for trace in traces:
+        for i in trace:
+            insts[i.sig].append(i)
+    return list(insts.values())
 
 
-def check_isomorphism(dags_by_path):
-    for (path, dags) in dags_by_path.items():
-        dag0 = dags[0]
-        for g in dags[1:]:
-            for (n0, n1) in zip(sorted(dag0._nodes), sorted(g._nodes)):
-                assert n0.name == n1.name
-                assert n0.label == n1.label
-                assert n0.type == n1.type
-            for (e0, e1) in zip(dag0.edges, g.edges):
-                assert e0.src.name == e1.src.name
-                assert e0.dst.name == e1.dst.name
+def trace_exemplars(traces_by_path):
+    # return sorted((min(traces, key=lambda l: l[0].id)
+    #                for traces in traces_by_path.values()),
+    #               key=lambda t: t.path)
 
-def check_constants(node_lists):
-    for nodes in node_lists:
-        are_const = ['const' in n.attrs for n in nodes]
-        if any(are_const):
-            if not all(are_const):
-                label = short_label(nodes[0])
-                print(f'ERROR: node {label} is sometimes const')
-            values = {n.attrs['value'] for n in nodes}
-            if len(values) > 1:
-                label = short_label(nodes[0])
-                print(f'ERROR: const node {label} has multiple values {values}')
+    return sorted((traces[0] for traces in traces_by_path.values()),
+                  key=lambda t: t.path)
 
 
-def print_value_ranges(node_lists, heading):
-    print(heading)
-    print()
-    for node_list in node_lists:
-        n0 = node_list[0]
-        if n0.attrs.get('const', False):
-            continue
-        values = [numeric_value(n) for n in node_list]
-        label = short_label(n0)
-        if n0.type == 'vector':
-            v0 = [v[0] for v in values]
-            v1 = [v[1] for v in values]
-            v2 = [v[2] for v in values]
-            minv = str((min(v0), min(v1), min(v2)))
-            maxv = str((max(v0), max(v1), max(v2)))
+def make_maps(traces):
+    id2sig = {}
+    sig2ids = defaultdict(list)
+    def map_trace(trace):
+        for inst in trace:
+            sig = inst.sig
+            id_ = inst.id
+            if id_ not in sig:
+                id2sig[id_] = sig
+            sig2ids[sig].append(id_)
+    map_trace(traces.extern)
+    for trace in traces.frames:
+        map_trace(trace)
+    for trace in traces.pixels.values():
+        map_trace(trace)
+    sig2id = {sig: min(ids) for (sig, ids) in sig2ids.items()}
+    return Maps(id2sig=id2sig, sig2id=sig2id)
+
+
+def check_signatures(traces):
+    """check that signatures are unique within a trace."""
+    for (fno, frame) in enumerate(traces.frames):
+        frm = Counter(i.sig for i in frame)
+        assert frm.most_common(1)[0][1] == 1
+        for pixels in traces.pixels.values():
+            pxl = Counter(i.sig for i in pixels)
+            assert pxl.most_common(1)[0][1] == 1
+
+
+def check_isomorphism(traces_by_path):
+    def index_ids(trace):
+        id_index = {}
+        for (i, inst) in enumerate(trace):
+            id_index[inst.id] = i
+        return id_index
+    for (path, traces) in traces_by_path.items():
+        trace0 = traces[0]
+        idx0 = index_ids(trace0)
+        for trace in traces:
+            idx = index_ids(trace)
+            assert len(trace) == len(trace0)
+            for (i, i0) in zip(trace, trace0):
+                assert i.op == i0.op
+                assert i.sig == i0.sig
+                assert len(i.operands) == len(i0.operands)
+                for (opn, opn0) in zip(i.operands, i0.operands):
+                    # print(f'opn = {opn} => {idx.get(opn, opn)}, '
+                    #       f'opn0 = {opn0} => {idx0.get(opn0, opn0)}')
+                    assert idx.get(opn, opn) == idx0.get(opn0, opn0)
+
+
+def check_constants(inst_lists):
+    for insts in inst_lists:
+        i0 = insts[0]
+        if i0.is_const:
+            assert all(i.value == i0.value for i in insts)
+
+
+def partition(traces):
+    d = defaultdict(list)
+    for t in traces:
+        value = t[t.pc].value
+        succ_sig = t[t.pc + 1].sig
+        d[(value, succ_sig)].append(t)
+    assert len(d) <= 2
+    if len(d) == 1:             # no split.
+        return traces, []
+    a, b = d.items()
+    ((a_value, a_sig), a_traces) = a
+    ((b_value, b_sig), b_traces) = b
+    if a_sig in {i.sig for t in b_traces for i in t}:
+        return b_traces, a_traces
+    else:
+        return a_traces, b_traces
+
+
+def merge_paths(exemplars):
+    code = []
+    Reactivation = namedtuple('Reactivation', 'label traces')
+    reactivations = {}
+    active_traces = [copy.copy(x) for x in exemplars]
+    for t in active_traces:
+        t.pc = 0
+    while active_traces:
+        a0 = active_traces[0]
+        inst0 = a0[a0.pc]
+        sig0 = inst0.sig
+        if sig0 in reactivations:
+            ra = reactivations[sig0]
+            if not ra.label.placed:
+                ra.label.place()
+            code.append(ra.label)
+            # print('sig0', sig0)
+            # print('ra.label', ra.label)
+            # print('ra.traces', sorted(t.path for t in ra.traces))
+            # print('active_traces', sorted(t.path for t in active_traces))
+            # print('inactive_traces', sorted(t.path for t in inactive_traces))
+            # print()
+            # assert all(t in inactive_traces for t in ra.traces)
+            active_traces.extend(ra.traces)
+            # for t in ra.traces:
+            #     inactive_traces.remove(t)
+            ra.traces.clear()
+            # del reactivations[sig0]
+        # for i in inactive_traces[:]:
+        #     if i.reactivation == sig0:
+        #         # print(f'reactivating {i.path} at {sig0}')
+        #         # inactive_traces.remove(i)
+        #         # active_traces.append(i)
+        #         del i.reactivation
+        # if not all(a[a.pc].sig == sig0 for a in active_traces):
+        #     print('about to fail:')
+        #     for a in active_traces:
+        #         print(f'{a.path:10} {a[a.pc]}')
+        #     print()
+        assert all(a[a.pc].sig == sig0 for a in active_traces)
+        if inst0.is_test:
+            # print(f'At test {inst0}')
+            active_traces, b = partition(active_traces)
+            for t in sorted(b, key=lambda t: t.path):
+                t.pc += 1
+                # t.reactivation = t[t.pc].sig
+                s = t[t.pc].sig
+                if s not in reactivations:
+                    # print(f'Adding label for {s}')
+                    reactivations[s] = Reactivation(Label(), [])
+                    # print(f'Adding label {reactivations[s].label} for {s}')
+                reactivations[s].traces.append(t)
+                label = reactivations[s].label
+                # print(f'deactivating {t.path}')
+            # inactive_traces.extend(b)
+            # xxx = sorted(t.path for t in active_traces)
+            # print(f'active: {" ".join(xxx)}')
+            a0 = active_traces[0]
+            t0 = a0[a0.pc]
+            # print(t0)
+            # print(t0.value)
+            op = {'false': 'bneg.s', 'true': 'bnneg.s'}[t0.value]
+            branch = t0._replace(op=op, operands=tuple((label, *t0.operands)))
+            code.append(branch)
+            code.append('')
+            # print()
         else:
-            minv = min(values)
-            maxv = max(values)
-        print(f'{label:20} {minv:>28} {maxv:>28}')
-    print()
+            # print(f'Emitting {inst0}')
+            code.append(inst0)
+        for a in active_traces:
+            a.pc += 1
+            if a.pc >= len(a):
+                # print(f'completed {a.path}')
+                active_traces.remove(a)
+        if not active_traces:
+            code.append('done')
+            if reactivations:
+                def ra_score(item):
+                    (sig, ra) = item
+                    if ra.traces:
+                        return max(len(t) for t in ra.traces)
+                    return 0
+                sig0, ra = max(reactivations.items(), key=ra_score)
+                               #
+                               # # key=lambda it: len(it[1].traces[0]))
+                               # key=lambda it: it[1].traces and
+                               #                max(it[1].traces, key=len))
+                active_traces.extend(ra.traces)
+                # for t in ra.traces:
+                #     inactive_traces.remove(t)
+                ra.traces.clear()
+
+            # if inactive_traces:
+            #     # print('inactive_traces',
+            #     #       sorted(t.path for t in inactive_traces))
+            #     # print('reactivations')
+            #     # for ra in reactivations.values():
+            #     #     print('  ', ra.label,
+            #     #           sorted(t.path for t in ra.traces))
+            #     # print()
+            #     it0 = max(inactive_traces, key=len)
+            #     sig0 = it0[it0.pc].sig
+            #     for it in inactive_traces[:]:
+            #         if it[it.pc].sig == sig0:
+            #             # print(f'restarting {it.path}')
+            #             inactive_traces.remove(it)
+            #             active_traces.append(it)
+            #             reactivations[sig0].traces.remove(it)
+            #     # code.append(reactivations[sig0].label)
+            #     # code.append('xyzzy')
+    assert not active_traces
+    # assert not inactive_traces
+    return code
+
+    # active is a subset of traces
+    # inactive is a subset of traces
+    #
+
+    # active = all traces
+    # while True:
+    #     assert all active traces are at same inst.
+    #     for inactive traces:
+    #         if next inst is reactivation point:
+    #             reactivate trace
+    #     step through to first branch
+    #     partition active traces by successor inst.
+    #     assert successor partition matches T/F partition.
+    #     for i in successors:
+    #         if i in any traces in the other partition,
+    #              i comes first.
+    #         assert only one successor comes first.
+    #         deactivate traces in other partition, set reactivation point
+    #         to
+    #     step active traces to next instruction
+    #
+    #
+    #     look at successor insts.  (assert they match T/F)
+    #     for each successor, find out whether it appears in the other
 
 
-def glonk(node_lists):
-    for (i, nodes) in enumerate(node_lists):
-        n0 = nodes[0]
-        print(i, len(nodes), n0)
-
-def flonk(dags_by_path, node_lists):
-    edge_map = set()
-    for (path, dags) in dags_by_path.items():
-        g = dags[0]
-        for edge in g.edges:
-            ssig = edge.src.attrs['sig']
-            dsig = edge.dst.attrs['sig']
-            edge_map.add((ssig, dsig))
-    print(len(edge_map))
-    print()
-    def node_cmp(n0, n1):
-        sig0 = n0.src.attrs['sig']
-        sig1 = n1.src.attrs['sig']
-        if (sig0, sig1) in edge_map:
-            return -1
-        elif (sig1, sig0) in edge_map:
-            return +1
-        else:
-            return cmp(n0.name, n1.name)
-    sorted_nodes = sorted(node_lists, cmp=node_cmp)
-    for (i, nodes) in enumerate(sorted_nodes):
-        n0 = nodes[0]
-        print(i, n0)
+def canon_ids(code, maps):
+    def canon_id(id_):
+        return maps.sig2id[maps.id2sig[id_]]
+    def try_canon_id(id_):
+        try:
+            return canon_id(id_)
+        except KeyError:
+            return id_          # Some operands, e.g. labels, are not mapped.
+    new_code = type(code)()
+    for inst in code:
+        if isinstance(inst, Inst):
+            id_ = canon_id(inst.id)
+            operands = tuple(try_canon_id(opn) for opn in inst.operands)
+            inst = inst._replace(id=id_, operands=operands)
+        new_code.append(inst)
+    return new_code
 
 
 def analyze():
-    frame_dags, pixel_dags = read_dags()
-    frame_dags_by_path = group_dags_by_path(frame_dags)
-    pixel_dags_by_path = group_dags_by_path(pixel_dags)
-    frame_dag_nodes = collect_nodes(frame_dags)
-    pixel_dag_nodes = collect_nodes(pixel_dags)
+    traces = read_log()
+    frame_traces_by_path = group_traces_by_path(traces.frames)
+    pixel_traces_by_path = group_traces_by_path(traces.pixels.values())
+    frame_trace_insts = collect_insts(traces.frames)
+    pixel_trace_insts = collect_insts(traces.pixels.values())
+    frame_trace_exemplars = trace_exemplars(frame_traces_by_path)
+    pixel_trace_exemplars = trace_exemplars(pixel_traces_by_path)
+    maps = make_maps(traces)
 
-    check_isomorphism(frame_dags_by_path)
-    check_isomorphism(pixel_dags_by_path)
-    check_constants(frame_dag_nodes)
-    check_constants(pixel_dag_nodes)
+    check_signatures(traces)
+    check_isomorphism(frame_traces_by_path)
+    check_isomorphism(pixel_traces_by_path)
+    check_constants(frame_trace_insts)
+    check_constants(pixel_trace_insts)
 
-    print_value_ranges(frame_dag_nodes, 'FRAME NODE RANGES')
-    print_value_ranges(pixel_dag_nodes, 'PIXEL NODE RANGES')
+    frame_code = merge_paths(frame_trace_exemplars)
+    pixel_code = merge_paths(pixel_trace_exemplars)
 
-    # next: generate merged graph as dotfile.
-    # glonk(frame_dag_nodes)
-    # glonk(pixel_dag_nodes)
-    flonk(pixel_dags_by_path, pixel_dag_nodes)
+    frame_code = canon_ids(frame_code, maps)
+    pixel_code = canon_ids(pixel_code, maps)
+
+    print()
+    print('Frame Code')
+    print()
+    for i in frame_code:
+        print('       ', i)
+    print()
+
+    print()
+    print('Pixel Code')
+    print()
+    for i in pixel_code:
+        if isinstance(i, Label):
+            print(f'{i}:')
+        else:
+            print('       ', i)
+    print()
 
 
 if __name__ == '__main__':

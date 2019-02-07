@@ -279,9 +279,9 @@ class Scene:
             not pisect.x.abs() - CHECKER_X_EXTENT < 0):
             return PLANE_COLOR
         reverse_light_ray = Ray(pisect, self.light.direction)
-        light_intersects = self.sphere.intersect(reverse_light_ray)
         checker = pisect.x.xor4(pisect.z)
         C = lerp(CHECK0_COLOR, CHECK1_COLOR, checker)
+        light_intersects = self.sphere.intersect(reverse_light_ray)
         if light_intersects:
             C = SHADOW_ATTEN * C
         return C

@@ -184,6 +184,9 @@ class Angle(NumericBase):
     def __format__(self, format_spec):
         fa = format(self.radians / math.tau, format_spec)
         # 'angle x.xxx tau'
+        # U+2220  ANGLE
+        # U+1d70f MATHEMATICAL ITALIC SMALL TAU
+        # U+03c4  GREEK SMALL LETTER TAU
         # return '\u2220{}\U0001d70f'.format(fa)
         return '\u2220{}\u03c4'.format(fa)
 
@@ -217,9 +220,6 @@ class Vec3(NumericBase):
         result = self.values[index]
         record('index', result, Type.SCALAR, (self, ))
         return result
-
-    # def components(self):
-    #     return iter(self.values)
 
     @property
     def x(self):
@@ -343,21 +343,21 @@ class Numerics:
         self.frame_counter = -1
         self.pixel_counter = 0
 
-    def scalar(self, value):
+    def scalar(self, value, sig=None):
         result = Scalar(value)
-        record('scalar\\n{}'.format(result), result, Type.SCALAR, ())
+        record('scalar\\n{}'.format(result), result, Type.SCALAR, (), sig)
         return result
 
-    def vec3(self, a, b, c):
+    def vec3(self, a, b, c, sig=None):
         result = Vec3(a, b, c)
-        record('vec', result, Type.VECTOR, result.values)
+        record('vec', result, Type.VECTOR, result.values, sig)
         return result
 
-    def angle(self, radians=None, degrees=None, units=None):
+    def angle(self, radians=None, degrees=None, units=None, sig=None):
         """units are 1/1024th of a circle."""
         assert sum(x is None for x in (radians, degrees, units)) == 2
         result = Angle(radians=radians, degrees=degrees, units=units)
-        record('angle\\n{:.4}'.format(result), result, Type.ANGLE, ())
+        record('angle\\n{:.4}'.format(result), result, Type.ANGLE, (), sig)
         return result
 
 

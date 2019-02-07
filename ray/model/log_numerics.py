@@ -23,16 +23,21 @@ class Logger:
 
     def log_inst(self, op, result, operands, sig=None):
         if sig is None:
-            sig = trickery.caller_signature(3, 6)
+            sig = trickery.caller_signature(4, 8)
         if not hasattr(result, 'id'):
             result.id = self._next_id()
         opn_ids = ', '.join(o.id for o in operands)
-        print(f'{op:8} {result.id:6} {opn_ids:19} # {sig}', file=self.f)
+        try:
+            val_str = f'"{result:.04}"'
+        except TypeError:
+            val_str = f'"{result}"'
+        print(f'{op:8} {result.id:6} {opn_ids:19} # {val_str:10} {sig}',
+              file=self.f)
 
     @property
     def f(self):
         if not self._f:
-            self._f = open('log', 'w')
+            self._f = open('log', 'w', buffering=8192)
         return self._f
 
 logger = Logger()
@@ -51,7 +56,6 @@ class Scalar:
             record('copy.s', self, (value, ))
         else:
             self.value = float(value)
-            # record('const', self, ())
 
     def __repr__(self):
         return repr(self.value)
@@ -101,12 +105,7 @@ class Scalar:
     def __lt__(self, other):
         assert other == 0, 'must compare to zero'
         result = Boolean(self.value < 0)
-        # global cg_test_count
-        # label = f'{cg_test_count}\\nis_neg\\n{result}'
-        # cg_test_count += 1
         record('is_neg.s', result, (self, ))
-        # if current_recorder:
-        #     current_recorder.tag_test(result)
         return result
 
     def abs(self):
@@ -124,7 +123,7 @@ class Scalar:
         return result
 
     def xor4(self, other):
-        """Stupid method.  Can't figure out how to decompose it."""
+        """Stupid method.  Can\'t figure out how to decompose it."""
         assert isinstance(other, Scalar)
         a, b = math.floor(self.value), math.floor(other.value)
         result = Scalar((a ^ b) >> 2 & 1)
@@ -152,14 +151,7 @@ class Angle:
         return f'{self:.4}'
 
     def __format__(self, format_spec):
-        fa = format(self.radians / math.tau, format_spec)
-        # 'angle x.xxx tau'
-        # U+2220  ANGLE
-        # U+1d70f MATHEMATICAL ITALIC SMALL TAU
-        # U+03c4  GREEK SMALL LETTER TAU
-        # return '\u2220{}\U0001d70f'.format(fa)
-        # return '\u2220{}\u03c4'.format(fa)
-        return fa
+        return format(self.radians / math.tau, format_spec)
 
     def sin(self):
         result = Scalar(math.sin(self.radians))
@@ -182,20 +174,17 @@ class Vec3:
             record('copy.v', self, (other, ))
         elif len(args) == 3:
             values = ()
-            # operands = ()
             for arg in args:
                 try:
                     value = float(arg)
                 except TypeError:
                     if isinstance(arg, Scalar):
-                        # operands += (arg, )
                         value = arg.value
                     else:
                         raise
                 values += (value, )
 
             self.values = values
-            # record('vec.sss', self, operands)
         else:
             assert False, f'expected 1 or 3 args, got {len(args)}'
 
@@ -210,7 +199,7 @@ class Vec3:
     def __getitem__(self, index):
         assert index in (0, 1, 2)
         result = Scalar(self.values[index])
-        record(f'index {index}', result, (self, ))
+        record(f'index.{index}', result, (self, ))
         return result
 
     @property
@@ -229,7 +218,6 @@ class Vec3:
 
     def _access_values(self):
         return iter(self.values)
-        # return [v.value for v in self.values]
 
     def __add__(self, other):
         assert all(isinstance(v, float) for v in self.values)
@@ -286,9 +274,10 @@ class Vec3:
         try:
             ONE
         except NameError:
-            ONE = Scalar(1)
-            sig = 'ONE = 1.0'
-            record('scalar', ONE, (), sig=sig)
+            ONE = Numerics().scalar(1, sig='xxxONE')
+            # ONE = Scalar(1)
+            # sig = 'ONE = 1.0'
+            # record('scalar', ONE, (), sig=sig)
         return self * (ONE / (self @ self).sqrt())
 
     def rotate(self, angle, axis):
@@ -359,8 +348,6 @@ class Numerics:
 
     def scalar(self, value, sig=None):
         result = Scalar(value)
-        if sig is None:
-            sig = f'const {result.value}'
         record('scalar', result, (), sig=sig)
         return result
 
@@ -404,11 +391,7 @@ class Numerics:
             tup_name = tup.__class__.__name__
             for f in tup._fields:
                 obj = getattr(tup, f)
-                try:
-                    fobj = format(obj, '.4')
-                except TypeError:
-                    fobj = format(obj)
-                record('input', obj, (), sig=f'{tup_name}.{f} = {fobj}')
+                record('input', obj, (), sig=f'{tup_name}.{f}')
 
 
     def _end_segment(self, msg, *output_tuples):
@@ -416,9 +399,5 @@ class Numerics:
             tup_name = tup.__class__.__name__
             for f in tup._fields:
                 obj = getattr(tup, f)
-                try:
-                    fobj = format(obj, '.4')
-                except TypeError:
-                    fobj = format(obj)
-                record('output', obj, (), sig=f'{tup_name}.{f} = {fobj}')
+                record('output', obj, (), sig=f'{tup_name}.{f}')
         logger.log_progress(f'END {msg}')
