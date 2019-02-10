@@ -57,12 +57,20 @@ module led_driver (
         output [15:0] LED_PANEL);
 
     // State machine.
-    localparam S_START   = 6'b000001;
-    localparam S_SHIFT0  = 6'b000010;
-    localparam S_SHIFT   = 6'b000100;
-    localparam S_SHIFTN  = 6'b001000;
-    localparam S_BLANK   = 6'b010000;
-    localparam S_UNBLANK = 6'b100000;
+    localparam S_START   = 8'b0000_0001;
+    localparam S_R1      = 8'b0000_0011;
+    localparam S_R1E     = 8'b0000_0010;
+    localparam S_R2      = 8'b0000_0101;
+    localparam S_R2E     = 8'b0000_0100;
+    localparam S_SHIFT0  = 8'b0000_1000;
+    localparam S_SHIFT   = 8'b0001_0000;
+    localparam S_SHIFTN  = 8'b0010_0000;
+    localparam S_BLANK   = 8'b0100_0000;
+    localparam S_UNBLANK = 8'b1000_0000;
+
+    // FM6126 Init Values
+    localparam FM_R1     = 16'h7FFF;
+    localparam FM_R2     = 16'h0040;
 
     // Route outputs to LED panel with registers as needed.
     reg   [2:0] led_rgb0;
@@ -95,11 +103,10 @@ module led_driver (
     wire  [2:0] rgb0, rgb1;
 
     reg  [31:0] cnt;
-    reg   [4:0] state;
+    reg   [7:0] state;
     reg   [1:0] blank;
     reg   [1:0] latch;
     reg   [1:0] sclk;
-    reg   [4:0] state;
 
     assign {frame, subframe, addr, x} = cnt;
     assign y0 = {1'b0, addr};
@@ -113,7 +120,7 @@ module led_driver (
             cnt                   <= 0;
             blank                 <= 2'b11;
             latch                 <= 2'b00;
-            sclk                  <= 2'b10;
+            sclk                  <= 2'b00;
             state                 <= S_START;
         end
         else
@@ -122,9 +129,63 @@ module led_driver (
                 S_START:          // Exit reset; start shifting column data.
                     begin
                         blank     <= 2'b11; // blank until first row is latched
-                        state     <= S_SHIFT;
+                        state     <= S_R1;
+                        // ChipOne panels can skip the init sequence
+                        //state     <= S_SHIFT;
                     end
 
+                // Setting FM6126 Registers
+                S_R1:
+                    begin
+                        led_rgb0  <= FM_R1[~cnt[3:0]] ? 3'b111 : 3'b000;
+                        led_rgb1  <= FM_R1[~cnt[3:0]] ? 3'b111 : 3'b000;
+                        cnt       <= cnt + 1;
+                        sclk      <= 2'b10;
+                        // In case we get some glitchyness because the latch
+                        // coincides with the clock signal we might want to
+                        // assert latch half cycle before the clock
+                        //if (cnt[5:0] == 52)
+                        //    latch     <= 2'b01;
+                        if (cnt[5:0] == 53)
+                            latch     <= 2'b11;
+                        if (cnt[5:0] == 63) begin
+                            state <= S_R1E;
+                        end
+                    end
+
+                S_R1E:
+                    begin
+                       latch      <= 2'b00;
+                       sclk       <= 2'b00;
+                       state      <= S_R2;
+                    end
+
+                S_R2:
+                    begin
+                        led_rgb0  <= FM_R2[~cnt[3:0]] ? 3'b111 : 3'b000;
+                        led_rgb1  <= FM_R2[~cnt[3:0]] ? 3'b111 : 3'b000;
+                        cnt       <= cnt + 1;
+                        sclk      <= 2'b10;
+                        // In case we get some glitchyness because the latch
+                        // coincides with the clock signal we might want to
+                        // assert latch half cycle before the clock
+                        //if (cnt[5:0] == 51)
+                        //    latch     <= 2'b01;
+                        if (cnt[5:0] == 52)
+                            latch     <= 2'b11;
+                        if (cnt[5:0] == 63) begin
+                            state <= S_R2E;
+                        end
+                    end
+
+                S_R2E:
+                    begin
+                       latch      <= 2'b00;
+                       sclk       <= 2'b00;
+                       state      <= S_SHIFT;
+                    end
+
+                // Beginning of the data out "loop"
                 S_SHIFT0:         // Shift first column.
                     begin
                         led_rgb0  <= rgb0;
