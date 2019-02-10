@@ -107,6 +107,8 @@ module led_driver (
     reg   [1:0] blank;
     reg   [1:0] latch;
     reg   [1:0] sclk;
+    reg  [15:0] init_reg;
+    reg   [6:0] init_lcnt;
 
     assign {frame, subframe, addr, x} = cnt;
     assign y0 = {1'b0, addr};
@@ -129,6 +131,9 @@ module led_driver (
                 S_START:          // Exit reset; start shifting column data.
                     begin
                         blank     <= 2'b11; // blank until first row is latched
+                        // Setup FM6126 init
+                        init_reg  <= FM_R1;
+                        init_lcnt <= 52;
                         state     <= S_R1;
                         // ChipOne panels can skip the init sequence
                         //state     <= S_SHIFT;
@@ -137,17 +142,16 @@ module led_driver (
                 // Setting FM6126 Registers
                 S_R1:
                     begin
-                        led_rgb0  <= FM_R1[~cnt[3:0]] ? 3'b111 : 3'b000;
-                        led_rgb1  <= FM_R1[~cnt[3:0]] ? 3'b111 : 3'b000;
+                        led_rgb0  <= init_reg[15] ? 3'b111 : 3'b000;
+                        led_rgb1  <= init_reg[15] ? 3'b111 : 3'b000;
+                        init_reg  <= {init_reg[14:0], init_reg[15]};
+
+                        latch     <= init_lcnt[6] ? 2'b11 : 2'b00;
+                        init_lcnt <= init_lcnt - 1;
+
                         cnt       <= cnt + 1;
                         sclk      <= 2'b10;
-                        // In case we get some glitchyness because the latch
-                        // coincides with the clock signal we might want to
-                        // assert latch half cycle before the clock
-                        //if (cnt[5:0] == 52)
-                        //    latch     <= 2'b01;
-                        if (cnt[5:0] == 53)
-                            latch     <= 2'b11;
+
                         if (cnt[5:0] == 63) begin
                             state <= S_R1E;
                         end
@@ -155,24 +159,25 @@ module led_driver (
 
                 S_R1E:
                     begin
-                       latch      <= 2'b00;
-                       sclk       <= 2'b00;
-                       state      <= S_R2;
+                        latch     <= 2'b00;
+                        sclk      <= 2'b00;
+                        init_reg  <= FM_R2;
+                        init_lcnt <= 51;
+                        state     <= S_R2;
                     end
 
                 S_R2:
                     begin
-                        led_rgb0  <= FM_R2[~cnt[3:0]] ? 3'b111 : 3'b000;
-                        led_rgb1  <= FM_R2[~cnt[3:0]] ? 3'b111 : 3'b000;
+                        led_rgb0  <= init_reg[15] ? 3'b111 : 3'b000;
+                        led_rgb1  <= init_reg[15] ? 3'b111 : 3'b000;
+                        init_reg  <= {init_reg[14:0], init_reg[15]};
+
+                        latch     <= init_lcnt[6] ? 2'b11 : 2'b00;
+                        init_lcnt <= init_lcnt - 1;
+
                         cnt       <= cnt + 1;
                         sclk      <= 2'b10;
-                        // In case we get some glitchyness because the latch
-                        // coincides with the clock signal we might want to
-                        // assert latch half cycle before the clock
-                        //if (cnt[5:0] == 51)
-                        //    latch     <= 2'b01;
-                        if (cnt[5:0] == 52)
-                            latch     <= 2'b11;
+
                         if (cnt[5:0] == 63) begin
                             state <= S_R2E;
                         end
@@ -180,9 +185,9 @@ module led_driver (
 
                 S_R2E:
                     begin
-                       latch      <= 2'b00;
-                       sclk       <= 2'b00;
-                       state      <= S_SHIFT;
+                        latch      <= 2'b00;
+                        sclk       <= 2'b00;
+                        state      <= S_SHIFT;
                     end
 
                 // Beginning of the data out "loop"
