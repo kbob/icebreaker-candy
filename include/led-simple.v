@@ -187,6 +187,7 @@ module led_driver (
                     begin
                         latch      <= 2'b00;
                         sclk       <= 2'b00;
+                        cnt        <= 0;
                         state      <= S_SHIFT;
                     end
 
