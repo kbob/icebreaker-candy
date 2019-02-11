@@ -63,6 +63,7 @@ module led_main #(
     wire  [2:0] rgb3_0;
     wire  [2:0] rgb3_1;
     wire [eh:0] painter_counter;
+    wire        led_driver_ready;
 
     incrementer #(
         .DELAY(DELAY),
@@ -71,7 +72,7 @@ module led_main #(
         .SUBFRAME_MSB(sh + ab + rb)
     ) painter_ticker (
         .clk(pll_clk),
-        .reset(reset),
+        .reset(!led_driver_ready),
         .counter(painter_counter));
 
     painter24 paint0 (
@@ -178,6 +179,7 @@ module led_main #(
         .reset(reset),
         .rgb0(rgb3_0),
         .rgb1(rgb3_1),
+        .ready(led_driver_ready),
         .LED_PANEL(LED_PANEL));
 
     pll_30mhz pll (
@@ -213,15 +215,26 @@ module led_driver #(
         input         reset,
         input   [2:0] rgb0,
         input   [2:0] rgb1,
+        output        ready,
         output [15:0] LED_PANEL);
 
     // State machine.
-    localparam S_START   = 6'b000001;
-    localparam S_SHIFT0  = 6'b000010;
-    localparam S_SHIFT   = 6'b000100;
-    localparam S_SHIFTN  = 6'b001000;
-    localparam S_BLANK   = 6'b010000;
-    localparam S_UNBLANK = 6'b100000;
+    localparam S_START   = 9'b0_0000_0001;
+    localparam S_R1      = 9'b0_0000_0011;
+    localparam S_R1E     = 9'b0_0000_0010;
+    localparam S_R2      = 9'b0_0000_0101;
+    localparam S_R2E     = 9'b0_0000_0100;
+    localparam S_SDELAY  = 9'b0_0000_1000;
+    localparam S_SHIFT0  = 9'b0_0001_0000;
+    localparam S_SHIFT   = 9'b0_0010_0000;
+    localparam S_SHIFTN  = 9'b0_0100_0000;
+    localparam S_BLANK   = 9'b0_1000_0000;
+    localparam S_UNBLANK = 9'b1_0000_0000;
+
+
+    // FM6126 Init Values
+    localparam FM_R1     = 16'h7FFF;
+    localparam FM_R2     = 16'h0040;
 
     // Route outputs to LED panel with registers as needed.
     reg   [2:0] led_rgb0;
@@ -246,6 +259,8 @@ module led_driver #(
     assign LED_PANEL = {P1B10, P1B9, P1B8, P1B7,  P1B4, P1B3, P1B2, P1B1,
                         P1A10, P1A9, P1A8, P1A7,  P1A4, P1A3, P1A2, P1A1};
 
+    assign ready = (state[2:0] == 0);
+
     // Dimensions
     localparam db = $clog2(DELAY); // delay bits
     localparam ab = 5;             // address bits
@@ -267,7 +282,9 @@ module led_driver #(
     reg   [1:0] blank;
     reg   [1:0] latch;
     reg   [1:0] sclk;
-    reg   [5:0] state;
+    reg   [8:0] state;
+    reg  [15:0] init_reg;
+    reg   [6:0] init_lcnt;
 
     assign {addr, col} = counter;
 
@@ -289,9 +306,71 @@ module led_driver #(
                 S_START:          // Exit reset; start shifting column data.
                     begin
                         blank     <= 2'b11; // blank until first row is latched
+                        // Setup FM6126 init
+                        init_reg  <= FM_R1;
+                        init_lcnt <= 52;
+                        state <= S_R1;
+                        // ChipOne panels can skip the init sequence
+                        //state <= S_SDELAY;
+                    end
+
+                // Setting FM6126 Registers
+                S_R1:
+                    begin
+                        led_rgb0  <= init_reg[15] ? 3'b111 : 3'b000;
+                        led_rgb1  <= init_reg[15] ? 3'b111 : 3'b000;
+                        init_reg  <= {init_reg[14:0], init_reg[15]};
+
+                        latch     <= init_lcnt[6] ? 2'b11 : 2'b00;
+                        init_lcnt <= init_lcnt - 1;
+
+                        counter   <= counter + 1;
+                        sclk      <= 2'b10;
+
+                        if (counter[5:0] == 63) begin
+                            state <= S_R1E;
+                        end
+                    end
+
+                S_R1E:
+                    begin
+                        latch     <= 2'b00;
+                        sclk      <= 2'b00;
+                        init_reg  <= FM_R2;
+                        init_lcnt <= 51;
+                        state     <= S_R2;
+                    end
+
+                S_R2:
+                    begin
+                        led_rgb0  <= init_reg[15] ? 3'b111 : 3'b000;
+                        led_rgb1  <= init_reg[15] ? 3'b111 : 3'b000;
+                        init_reg  <= {init_reg[14:0], init_reg[15]};
+
+                        latch     <= init_lcnt[6] ? 2'b11 : 2'b00;
+                        init_lcnt <= init_lcnt - 1;
+
+                        counter   <= counter + 1;
+                        sclk      <= 2'b10;
+
+                        if (counter[5:0] == 63) begin
+                            state <= S_R2E;
+                        end
+                    end
+
+                S_R2E:
+                    begin
+                        latch      <= 2'b00;
+                        sclk       <= 2'b00;
+                        counter    <= 0;
+                        state      <= S_SDELAY;
+                    end
+
+                S_SDELAY:         // Startup delay
+                    begin
                         delay     <= delay - 1;
-                        if (!delay)
-                            state <= S_SHIFT;
+                        if(!delay)
+                            state      <= S_SHIFT;
                     end
 
                 S_SHIFT0:         // Shift first column.
