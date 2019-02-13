@@ -9,7 +9,7 @@ module top (
 
         led_main #(
             .FRAME_BITS(16),
-            .DELAY(1)
+            .DELAY(3)
         ) main (
             .CLK(CLK),
             .resetn_btn(BTN_N),
@@ -26,9 +26,25 @@ module painter24(
         input   [5:0] y,
         output [23:0] rgb24);
 
-    wire [7:0] hue = frame[2+:8] - x[5:1];
-    wire [5:0] yy = y + frame[0+:6] + x;
-    wire [4:0] dim = yy[5] ? 31 - yy[4:0] : yy[4:0];
+    reg  [7:0] hue1;
+    reg  [5:0] yy1;
+    always @(posedge clk) begin
+        hue1 <= frame[2+:8] - x[5:1];
+        yy1 <= y + frame[0+:6] + x;
+    end
+
+    reg  [7:0] hue;
+    reg  [5:0] yy;
+    reg  [4:0] dim;
+    always @(posedge clk) begin
+        hue <= hue1;
+        yy  <= yy1;
+        dim <= yy1[5] ? 31 - yy1[4:0] : yy1[4:0];
+    end
+
+    // wire [7:0] hue = frame[2+:8] - x[5:1];
+    // wire [5:0] yy = y + frame[0+:6] + x;
+    // wire [4:0] dim = yy[5] ? 31 - yy[4:0] : yy[4:0];
 
     reg  [2:0] schan, gchan;     // color channels that are solid, gradient.
     reg  [4:0] sdist, gdist;
@@ -97,10 +113,12 @@ module painter24(
     assign grad  = {ggdist[4:0], ggdist[4:2]};
     // assign solid = {3'b0, sdist[4:0]};
     // assign grad  = {3'b0, gdist[4:0]};
-    wire [7:0] red, green, blue;
-    assign red   = in_stripe ? gchan[0] ? grad : (schan[0] ? solid : 0) : 0;
-    assign green = in_stripe ? gchan[1] ? grad : (schan[1] ? solid : 0) : 0;
-    assign blue  = in_stripe ? gchan[2] ? grad : (schan[2] ? solid : 0) : 0;
+    reg  [7:0] red, green, blue;
+    always @(posedge clk) begin
+        red   <= in_stripe ? gchan[0] ? grad : (schan[0] ? solid : 0) : 0;
+        green <= in_stripe ? gchan[1] ? grad : (schan[1] ? solid : 0) : 0;
+        blue  <= in_stripe ? gchan[2] ? grad : (schan[2] ? solid : 0) : 0;
+    end
 
     assign rgb24 = {blue, green, red};
 
