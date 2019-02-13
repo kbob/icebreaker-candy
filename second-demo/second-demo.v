@@ -2,7 +2,7 @@
 
 module top (
         input  CLK,
-        input  BTN1_N,
+        input  BTN_N,
         output LED1,
         output LED2,
         output LED3,
@@ -174,7 +174,7 @@ module top (
 
     pll_30mhz pll(
         .clk_pin(CLK),
-        .reset_pin(~BTN1_N),
+        .reset_pin(~BTN_N),
         .locked(clk30_locked),
         .clk30(clk30));
 
