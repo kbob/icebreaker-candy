@@ -219,18 +219,18 @@ module led_driver #(
         output [15:0] LED_PANEL);
 
     // State machine.
-    localparam S_START   = 9'b0_0000_0001;
-    localparam S_R1      = 9'b0_0000_0011;
-    localparam S_R1E     = 9'b0_0000_0010;
-    localparam S_R2      = 9'b0_0000_0101;
-    localparam S_R2E     = 9'b0_0000_0100;
-    localparam S_SDELAY  = 9'b0_0000_1000;
-    localparam S_SHIFT0  = 9'b0_0001_0000;
-    localparam S_SHIFT   = 9'b0_0010_0000;
-    localparam S_SHIFTN  = 9'b0_0100_0000;
-    localparam S_BLANK   = 9'b0_1000_0000;
-    localparam S_UNBLANK = 9'b1_0000_0000;
-
+    localparam
+        S_START   = 0,
+        S_R1      = 1,
+        S_R1E     = 2,
+        S_R2      = 3,
+        S_R2E     = 4,
+        S_SDELAY  = 5,
+        S_SHIFT0  = 6,
+        S_SHIFT   = 7,
+        S_SHIFTN  = 8,
+        S_BLANK   = 9,
+        S_UNBLANK = 10;
 
     // FM6126 Init Values
     localparam FM_R1     = 16'h7FFF;
@@ -259,7 +259,7 @@ module led_driver #(
     assign LED_PANEL = {P1B10, P1B9, P1B8, P1B7,  P1B4, P1B3, P1B2, P1B1,
                         P1A10, P1A9, P1A8, P1A7,  P1A4, P1A3, P1A2, P1A1};
 
-    assign ready = (state[2:0] == 0);
+    assign ready = (state > 4);
 
     // Dimensions
     localparam db = $clog2(DELAY); // delay bits
@@ -282,7 +282,7 @@ module led_driver #(
     reg   [1:0] blank;
     reg   [1:0] latch;
     reg   [1:0] sclk;
-    reg   [8:0] state;
+    reg   [3:0] state;
     reg  [15:0] init_reg;
     reg   [6:0] init_lcnt;
 

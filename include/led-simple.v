@@ -57,16 +57,17 @@ module led_driver (
         output [15:0] LED_PANEL);
 
     // State machine.
-    localparam S_START   = 8'b0000_0001;
-    localparam S_R1      = 8'b0000_0011;
-    localparam S_R1E     = 8'b0000_0010;
-    localparam S_R2      = 8'b0000_0101;
-    localparam S_R2E     = 8'b0000_0100;
-    localparam S_SHIFT0  = 8'b0000_1000;
-    localparam S_SHIFT   = 8'b0001_0000;
-    localparam S_SHIFTN  = 8'b0010_0000;
-    localparam S_BLANK   = 8'b0100_0000;
-    localparam S_UNBLANK = 8'b1000_0000;
+    localparam
+        S_START   = 0,
+        S_R1      = 1,
+        S_R1E     = 2,
+        S_R2      = 3,
+        S_R2E     = 4,
+        S_SHIFT0  = 5,
+        S_SHIFT   = 6,
+        S_SHIFTN  = 7,
+        S_BLANK   = 8,
+        S_UNBLANK = 9;
 
     // FM6126 Init Values
     localparam FM_R1     = 16'h7FFF;
@@ -103,12 +104,12 @@ module led_driver (
     wire  [2:0] rgb0, rgb1;
 
     reg  [31:0] cnt;
-    reg   [7:0] state;
     reg   [1:0] blank;
     reg   [1:0] latch;
     reg   [1:0] sclk;
     reg  [15:0] init_reg;
     reg   [6:0] init_lcnt;
+    reg   [3:0] state;
 
     assign {frame, subframe, addr, x} = cnt;
     assign y0 = {1'b0, addr};
