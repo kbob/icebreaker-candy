@@ -196,7 +196,7 @@ module led_driver #(
     assign LED_PANEL = {P1B10, P1B9, P1B8, P1B7,  P1B4, P1B3, P1B2, P1B1,
                         P1A10, P1A9, P1A8, P1A7,  P1A4, P1A3, P1A2, P1A1};
 
-    assign ready = (state > 4);
+    assign ready = (state >= S_SDELAY);
 
     // Dimensions
     localparam DB = $clog2(DELAY); // delay bits
