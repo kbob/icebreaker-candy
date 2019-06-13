@@ -50,7 +50,10 @@ module painter24(
     reg  [4:0] sdist, gdist;
     reg        in_stripe;
     always @(posedge clk) begin
-        in_stripe <= x[1:0] == 0;
+        // in_stripe <= x[1:0] == 0;
+        // in_stripe <= (x[2:1] - frame[3:2]) != 0;
+        // in_stripe <= 1;
+        in_stripe <= (x[2:0] - frame[2:0]) != 0;
         sdist <= 5'b11111;
         case (hue[7:5])
 
